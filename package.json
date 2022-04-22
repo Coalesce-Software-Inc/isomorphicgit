@@ -14,6 +14,7 @@
     "node": ">=10"
   },
   "scripts": {
+  "postinstall":"build",
     "start": "nps",
     "format": "nps format",
     "build": "nps build",
