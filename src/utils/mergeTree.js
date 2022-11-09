@@ -114,6 +114,27 @@ export async function mergeTree({
               asyncMergeConflictCallback,
             })
           }
+
+          if (
+            base === null && 
+            (await ours.type()) === 'blob' &&
+            (await theirs.type()) === 'blob'
+          ) {
+            //use ours as the base to so we can still handle this case
+            //if we can pass in a preference for our changes vs their changes (or ask) then
+            //we could make use of the base to force it to take 1 vs the other in these cases
+            return mergeBlobs({
+              fs,
+              gitdir,
+              path,
+              ours,
+              base,
+              theirs,
+              ourName,
+              theirName,
+              asyncMergeConflictCallback,
+            })
+          }
           // all other types of conflicts fail
           throw new MergeNotSupportedError()
         }
@@ -212,25 +233,34 @@ async function mergeBlobs({
   const type = 'blob'
   // Compute the new mode.
   // Since there are ONLY two valid blob modes ('100755' and '100644') it boils down to this
-  const mode =
-    (await base.mode()) === (await ours.mode())
-      ? await theirs.mode()
-      : await ours.mode()
-  // The trivial case: nothing to merge except maybe mode
-  if ((await ours.oid()) === (await theirs.oid())) {
-    return { mode, path, oid: await ours.oid(), type }
-  }
-  // if only one side made oid changes, return that side's oid
-  if ((await ours.oid()) === (await base.oid())) {
-    return { mode, path, oid: await theirs.oid(), type }
-  }
-  if ((await theirs.oid()) === (await base.oid())) {
-    return { mode, path, oid: await ours.oid(), type }
+  let ourMode = await ours.mode();
+  if (base !== null) {
+    const mode =
+      (await base.mode()) === (ourMode)
+        ? await theirs.mode()
+        : ourMode
+    // The trivial case: nothing to merge except maybe mode
+    if ((await ours.oid()) === (await theirs.oid())) {
+      return { mode, path, oid: await ours.oid(), type }
+    }
+    // if only one side made oid changes, return that side's oid
+    if ((await ours.oid()) === (await base.oid())) {
+      return { mode, path, oid: await theirs.oid(), type }
+    }
+    if ((await theirs.oid()) === (await base.oid())) {
+      return { mode, path, oid: await ours.oid(), type }
+    }
   }
   // if both sides made changes do a merge
+  let baseContent;
+  try {
+    baseContent = Buffer.from(await base.content()).toString('utf8');
+  } catch(error) {
+    baseContent = Buffer.from("").toString('utf8');
+  }
   const { mergedText, cleanMerge } = mergeFile({
     ourContent: Buffer.from(await ours.content()).toString('utf8'),
-    baseContent: Buffer.from(await base.content()).toString('utf8'),
+    baseContent,
     theirContent: Buffer.from(await theirs.content()).toString('utf8'),
     ourName,
     theirName,
@@ -238,11 +268,18 @@ async function mergeBlobs({
     format,
     markerSize,
   })
+
   let awaitedMergedText = mergedText
   if (!cleanMerge) {
     // all other types of conflicts fail
     try {
-      awaitedMergedText = await asyncMergeConflictCallback(mergedText, base._fullpath)
+      let fullpath = ""
+      try {
+        fullpath = base._fullpath
+      }catch(error) {
+        fullpath = ours._fullpath
+      }
+      awaitedMergedText = await asyncMergeConflictCallback(mergedText, fullpath)
     } catch (error) {
       throw new MergeNotSupportedError()
     }
@@ -255,5 +292,5 @@ async function mergeBlobs({
     object: Buffer.from(awaitedMergedText, 'utf8'),
     dryRun,
   })
-  return { mode, path, oid, type }
+  return { mode:ourMode, path, oid, type }
 }
