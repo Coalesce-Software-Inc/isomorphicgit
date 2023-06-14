@@ -92,7 +92,7 @@ export async function mergeTree({
             : undefined
         }
         case 'true-true': {
-          // Modifications
+          // Base case, no alterations except for just passing through the asyncMergeConflictCallback in the event it's not a clean merge
           if (
             ours &&
             base &&
@@ -114,15 +114,12 @@ export async function mergeTree({
               asyncMergeConflictCallback,
             })
           }
-
-          if (
+          // case: base doesn't have the file, was added in both ours and theirs
+          else if (
             base === null && 
             (await ours.type()) === 'blob' &&
             (await theirs.type()) === 'blob'
           ) {
-            //use ours as the base to so we can still handle this case
-            //if we can pass in a preference for our changes vs their changes (or ask) then
-            //we could make use of the base to force it to take 1 vs the other in these cases
             return mergeBlobs({
               fs,
               gitdir,
@@ -135,10 +132,59 @@ export async function mergeTree({
               asyncMergeConflictCallback,
             })
           }
-          // all other types of conflicts fail
+          //case: this happens when both repos introduce a new directory
+          else if (base === null && (await ours.type()) === 'tree' && (await theirs.type()) === 'tree') {
+            //if we have ours, then use ours to introduce the directory, since it's a directory this doesn't matter where it actually comes from
+            return ours
+            ? {
+                mode: await ours.mode(),
+                path,
+                oid: await ours.oid(),
+                type: await ours.type(),
+              }
+            : undefined
+          }
+          //case: deleted in both, but was in base
+            else if (base !== null && !ours && !theirs) {
+              //returning undefined prunes the file/directory, since it was deleted in both, that's what we want
+            return undefined;
+          }
+          //case: base has file, we made change with file, theirs was delete
+          else if (base !== null && !!ours && !theirs && (await ours.type()) === 'blob') {
+            //let the user decide using the conflict resolution tool
+            return mergeBlobs({
+              fs,
+              gitdir,
+              path,
+              ours,
+              base,
+              theirs,
+              ourName,
+              theirName,
+              asyncMergeConflictCallback,
+            })
+          }
+
+          //case: base has file, we delete file, theirs was change
+          else if (base !== null && !!theirs && !ours && (await theirs.type()) === 'blob') {
+            return mergeBlobs({
+              fs,
+              gitdir,
+              path,
+              ours,
+              base,
+              theirs,
+              ourName,
+              theirName,
+              asyncMergeConflictCallback,
+            })
+          }
+          
+          //not really sure what's not covered by above, but this is a fallback
           throw new MergeNotSupportedError()
         }
         default: {
+          //case: we should never land here
           throw new MergeNotSupportedError()
         }
       }
@@ -230,38 +276,54 @@ async function mergeBlobs({
   dryRun,
   asyncMergeConflictCallback,
 }) {
+  //if ours or theirs is null (not typically handled, but now I'm adding support for it maybe?)
+  //let the user provide a mergeText, if it's empty string, then we want to delete so return undefined
+  //if not undefined then we writeObject as before.
   const type = 'blob'
   // Compute the new mode.
   // Since there are ONLY two valid blob modes ('100755' and '100644') it boils down to this
-  let ourMode = await ours.mode();
-  if (base !== null) {
-    const mode =
-      (await base.mode()) === (ourMode)
-        ? await theirs.mode()
-        : ourMode
+  let ourMode = !!ours ? await ours.mode() : null;
+  let theirMode = !!theirs ? await theirs.mode() : null;
+  let baseMode = !!base ? await base.mode() : null;
+  if (!!baseMode && !!ourMode && !!theirMode) {
+    const mode = baseMode === ourMode ? theirMode : ourMode;
+    const baseOID = await base.oid();
+    const oursOID = await ours.oid();
+    const theirsOID = await theirs.oid();
     // The trivial case: nothing to merge except maybe mode
-    if ((await ours.oid()) === (await theirs.oid())) {
-      return { mode, path, oid: await ours.oid(), type }
+    if (oursOID === theirsOID) {
+      return { mode, path, oid: oursOID, type }
     }
     // if only one side made oid changes, return that side's oid
-    if ((await ours.oid()) === (await base.oid())) {
-      return { mode, path, oid: await theirs.oid(), type }
+    if (oursOID === baseOID) {
+      return { mode, path, oid: await theirsOID, type }
     }
-    if ((await theirs.oid()) === (await base.oid())) {
-      return { mode, path, oid: await ours.oid(), type }
+    if (theirsOID === baseOID) {
+      return { mode, path, oid: await oursOID, type }
     }
   }
   // if both sides made changes do a merge
-  let baseContent;
+  let baseContent = "";
+  let ourContent = "";
+  let theirContent = "";
   try {
     baseContent = Buffer.from(await base.content()).toString('utf8');
-  } catch(error) {
-    baseContent = Buffer.from("").toString('utf8');
+  } catch {
+  }
+
+  try {
+    ourContent = Buffer.from(await ours.content()).toString('utf8');
+  } catch {
+  }
+
+  try {
+    theirContent = Buffer.from(await theirs.content()).toString('utf8');
+  } catch {
   }
   const { mergedText, cleanMerge } = mergeFile({
-    ourContent: Buffer.from(await ours.content()).toString('utf8'),
+    ourContent,
     baseContent,
-    theirContent: Buffer.from(await theirs.content()).toString('utf8'),
+    theirContent,
     ourName,
     theirName,
     baseName,
@@ -275,12 +337,19 @@ async function mergeBlobs({
     try {
       let fullpath = ""
       try {
+        //possibly null
         fullpath = base._fullpath
       }catch(error) {
-        fullpath = ours._fullpath
+        //get the path
+        fullpath = ours?._fullpath || theirs._fullpath
       }
-      awaitedMergedText = await asyncMergeConflictCallback(mergedText, fullpath)
+      awaitedMergedText = await asyncMergeConflictCallback(mergedText, fullpath);
+      //the user deleted all the text, we remove the file
+      if (!awaitedMergedText) {
+        return undefined;
+      }
     } catch (error) {
+      //if the user aborts the asyncMergeConflictCallback, bail out and tell them it failed
       throw new MergeNotSupportedError()
     }
   }
@@ -292,5 +361,5 @@ async function mergeBlobs({
     object: Buffer.from(awaitedMergedText, 'utf8'),
     dryRun,
   })
-  return { mode:ourMode, path, oid, type }
+  return { mode:ourMode ?? theirMode, path, oid, type }
 }
