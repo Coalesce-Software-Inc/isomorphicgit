@@ -122,7 +122,7 @@ export async function _merge({
     if (fastForwardOnly) {
       throw new FastForwardError()
     }
-    // try a fancier merge
+      // try a fancier merge
     const tree = await mergeTree({
       fs,
       cache,
@@ -162,5 +162,6 @@ export async function _merge({
       tree,
       mergeCommit: true,
     }
-  }
+
+    }
 }
