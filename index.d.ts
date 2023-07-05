@@ -716,6 +716,7 @@ export var Errors: Readonly<{
     MergeNotSupportedError: typeof MergeNotSupportedError;
     MissingNameError: typeof MissingNameError;
     MissingParameterError: typeof MissingParameterError;
+    MultipleGitError: typeof MultipleGitError;
     NoRefspecError: typeof NoRefspecError;
     NotFoundError: typeof NotFoundError;
     ObjectTypeError: typeof ObjectTypeError;
@@ -751,8 +752,10 @@ export function WORKDIR(): Walker;
  * @param {FsClient} args.fs - a file system implementation
  * @param {string} args.dir - The [working tree](dir-vs-gitdir.md) directory path
  * @param {string} [args.gitdir=join(dir, '.git')] - [required] The [git directory](dir-vs-gitdir.md) path
- * @param {string} args.filepath - The path to the file to add to the index
+ * @param {string|string[]} args.filepath - The path to the file to add to the index
  * @param {object} [args.cache] - a [cache](cache.md) object
+ * @param {boolean} [args.force=false] - add to index even if matches gitignore. Think `git add --force`
+ * @param {boolean} [args.parallel=false] - process each input file in parallel. Parallel processing will result in more memory consumption but less process time
  *
  * @returns {Promise<void>} Resolves successfully once the git index has been updated
  *
@@ -762,12 +765,14 @@ export function WORKDIR(): Walker;
  * console.log('done')
  *
  */
-export function add({ fs: _fs, dir, gitdir, filepath, cache, }: {
+export function add({ fs: _fs, dir, gitdir, filepath, cache, force, parallel, }: {
     fs: CallbackFsClient | PromiseFsClient;
     dir: string;
     gitdir?: string;
-    filepath: string;
+    filepath: string | string[];
     cache?: any;
+    force?: boolean;
+    parallel?: boolean;
 }): Promise<void>;
 /**
  * Add or update an object note
@@ -2695,7 +2700,7 @@ export function readTree({ fs, dir, gitdir, oid, filepath, cache, }: {
  * @param {FsClient} args.fs - a file system client
  * @param {string} [args.dir] - The [working tree](dir-vs-gitdir.md) directory path
  * @param {string} [args.gitdir=join(dir, '.git')] - [required] The [git directory](dir-vs-gitdir.md) path
- * @param {string} args.filepath - The path to the file to remove from the index
+ * @param {string|string[]} args.filepath - The path to the file to remove from the index
  * @param {object} [args.cache] - a [cache](cache.md) object
  *
  * @returns {Promise<void>} Resolves successfully once the git index has been updated
@@ -2709,7 +2714,7 @@ export function remove({ fs: _fs, dir, gitdir, filepath, cache, }: {
     fs: CallbackFsClient | PromiseFsClient;
     dir?: string;
     gitdir?: string;
-    filepath: string;
+    filepath: string | string[];
     cache?: any;
 }): Promise<void>;
 /**
@@ -3834,6 +3839,23 @@ declare namespace MissingParameterError {
     const code_15: 'MissingParameterError';
     export { code_15 as code };
 }
+declare class MultipleGitError extends BaseError {
+    /**
+     * @param {Error[]} errors
+     * @param {string} message
+     */
+    constructor(errors: Error[]);
+    code: "MultipleGitError";
+    name: "MultipleGitError";
+    data: {
+        errors: Error[];
+    };
+    errors: Error[];
+}
+declare namespace MultipleGitError {
+    const code_16: 'MultipleGitError';
+    export { code_16 as code };
+}
 declare class NoRefspecError extends BaseError {
     /**
      * @param {string} remote
@@ -3846,8 +3868,8 @@ declare class NoRefspecError extends BaseError {
     };
 }
 declare namespace NoRefspecError {
-    const code_16: 'NoRefspecError';
-    export { code_16 as code };
+    const code_17: 'NoRefspecError';
+    export { code_17 as code };
 }
 declare class NotFoundError extends BaseError {
     /**
@@ -3861,8 +3883,8 @@ declare class NotFoundError extends BaseError {
     };
 }
 declare namespace NotFoundError {
-    const code_17: 'NotFoundError';
-    export { code_17 as code };
+    const code_18: 'NotFoundError';
+    export { code_18 as code };
 }
 declare class ObjectTypeError extends BaseError {
     /**
@@ -3882,8 +3904,8 @@ declare class ObjectTypeError extends BaseError {
     };
 }
 declare namespace ObjectTypeError {
-    const code_18: 'ObjectTypeError';
-    export { code_18 as code };
+    const code_19: 'ObjectTypeError';
+    export { code_19 as code };
 }
 declare class ParseError extends BaseError {
     /**
@@ -3899,8 +3921,8 @@ declare class ParseError extends BaseError {
     };
 }
 declare namespace ParseError {
-    const code_19: 'ParseError';
-    export { code_19 as code };
+    const code_20: 'ParseError';
+    export { code_20 as code };
 }
 declare class PushRejectedError extends BaseError {
     /**
@@ -3914,8 +3936,8 @@ declare class PushRejectedError extends BaseError {
     };
 }
 declare namespace PushRejectedError {
-    const code_20: 'PushRejectedError';
-    export { code_20 as code };
+    const code_21: 'PushRejectedError';
+    export { code_21 as code };
 }
 declare class RemoteCapabilityError extends BaseError {
     /**
@@ -3931,8 +3953,8 @@ declare class RemoteCapabilityError extends BaseError {
     };
 }
 declare namespace RemoteCapabilityError {
-    const code_21: 'RemoteCapabilityError';
-    export { code_21 as code };
+    const code_22: 'RemoteCapabilityError';
+    export { code_22 as code };
 }
 declare class SmartHttpError extends BaseError {
     /**
@@ -3948,8 +3970,8 @@ declare class SmartHttpError extends BaseError {
     };
 }
 declare namespace SmartHttpError {
-    const code_22: 'SmartHttpError';
-    export { code_22 as code };
+    const code_23: 'SmartHttpError';
+    export { code_23 as code };
 }
 declare class UnknownTransportError extends BaseError {
     /**
@@ -3967,8 +3989,8 @@ declare class UnknownTransportError extends BaseError {
     };
 }
 declare namespace UnknownTransportError {
-    const code_23: 'UnknownTransportError';
-    export { code_23 as code };
+    const code_24: 'UnknownTransportError';
+    export { code_24 as code };
 }
 declare class UnsafeFilepathError extends BaseError {
     /**
@@ -3982,8 +4004,8 @@ declare class UnsafeFilepathError extends BaseError {
     };
 }
 declare namespace UnsafeFilepathError {
-    const code_24: 'UnsafeFilepathError';
-    export { code_24 as code };
+    const code_25: 'UnsafeFilepathError';
+    export { code_25 as code };
 }
 declare class UrlParseError extends BaseError {
     /**
@@ -3997,8 +4019,8 @@ declare class UrlParseError extends BaseError {
     };
 }
 declare namespace UrlParseError {
-    const code_25: 'UrlParseError';
-    export { code_25 as code };
+    const code_26: 'UrlParseError';
+    export { code_26 as code };
 }
 declare class UserCanceledError extends BaseError {
     code: "UserCanceledError";
@@ -4006,8 +4028,8 @@ declare class UserCanceledError extends BaseError {
     data: {};
 }
 declare namespace UserCanceledError {
-    const code_26: 'UserCanceledError';
-    export { code_26 as code };
+    const code_27: 'UserCanceledError';
+    export { code_27 as code };
 }
 /**
  * @typedef {Object} GitProgressEvent

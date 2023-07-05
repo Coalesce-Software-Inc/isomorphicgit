@@ -560,6 +560,23 @@ class MissingParameterError extends BaseError {
 /** @type {'MissingParameterError'} */
 MissingParameterError.code = 'MissingParameterError';
 
+class MultipleGitError extends BaseError {
+  /**
+   * @param {Error[]} errors
+   * @param {string} message
+   */
+  constructor(errors) {
+    super(
+      `There are multiple errors that were thrown by the method. Please refer to the "errors" property to see more`
+    );
+    this.code = this.name = MultipleGitError.code;
+    this.data = { errors };
+    this.errors = errors;
+  }
+}
+/** @type {'MultipleGitError'} */
+MultipleGitError.code = 'MultipleGitError';
+
 class NoRefspecError extends BaseError {
   /**
    * @param {string} remote
@@ -747,6 +764,7 @@ var index = /*#__PURE__*/Object.freeze({
   MergeNotSupportedError: MergeNotSupportedError,
   MissingNameError: MissingNameError,
   MissingParameterError: MissingParameterError,
+  MultipleGitError: MultipleGitError,
   NoRefspecError: NoRefspecError,
   NotFoundError: NotFoundError,
   ObjectTypeError: ObjectTypeError,
