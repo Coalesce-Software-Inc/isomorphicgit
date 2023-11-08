@@ -3197,6 +3197,23 @@ class MissingParameterError extends BaseError {
 /** @type {'MissingParameterError'} */
 MissingParameterError.code = 'MissingParameterError';
 
+class MultipleGitError extends BaseError {
+  /**
+   * @param {Error[]} errors
+   * @param {string} message
+   */
+  constructor(errors) {
+    super(
+      `There are multiple errors that were thrown by the method. Please refer to the "errors" property to see more`
+    );
+    this.code = this.name = MultipleGitError.code;
+    this.data = { errors };
+    this.errors = errors;
+  }
+}
+/** @type {'MultipleGitError'} */
+MultipleGitError.code = 'MultipleGitError';
+
 class ParseError extends BaseError {
   /**
    * @param {string} expected
@@ -3322,6 +3339,7 @@ var Errors = /*#__PURE__*/Object.freeze({
   MergeNotSupportedError: MergeNotSupportedError,
   MissingNameError: MissingNameError,
   MissingParameterError: MissingParameterError,
+  MultipleGitError: MultipleGitError,
   NoRefspecError: NoRefspecError,
   NotFoundError: NotFoundError,
   ObjectTypeError: ObjectTypeError,
@@ -4423,8 +4441,10 @@ function posixifyPathBuffer(buffer) {
  * @param {FsClient} args.fs - a file system implementation
  * @param {string} args.dir - The [working tree](dir-vs-gitdir.md) directory path
  * @param {string} [args.gitdir=join(dir, '.git')] - [required] The [git directory](dir-vs-gitdir.md) path
- * @param {string} args.filepath - The path to the file to add to the index
+ * @param {string|string[]} args.filepath - The path to the file to add to the index
  * @param {object} [args.cache] - a [cache](cache.md) object
+ * @param {boolean} [args.force=false] - add to index even if matches gitignore. Think `git add --force`
+ * @param {boolean} [args.parallel=false] - process each input file in parallel. Parallel processing will result in more memory consumption but less process time
  *
  * @returns {Promise<void>} Resolves successfully once the git index has been updated
  *
@@ -4440,6 +4460,8 @@ async function add({
   gitdir = join(dir, '.git'),
   filepath,
   cache = {},
+  force = false,
+  parallel = true,
 }) {
   try {
     assertParameter('fs', _fs);
@@ -4448,8 +4470,16 @@ async function add({
     assertParameter('filepath', filepath);
 
     const fs = new FileSystem(_fs);
-    await GitIndexManager.acquire({ fs, gitdir, cache }, async function(index) {
-      await addToIndex({ dir, gitdir, fs, filepath, index });
+    await GitIndexManager.acquire({ fs, gitdir, cache }, async index => {
+      return addToIndex({
+        dir,
+        gitdir,
+        fs,
+        filepath,
+        index,
+        force,
+        parallel,
+      })
     });
   } catch (err) {
     err.caller = 'git.add';
@@ -4457,31 +4487,84 @@ async function add({
   }
 }
 
-async function addToIndex({ dir, gitdir, fs, filepath, index }) {
+async function addToIndex({
+  dir,
+  gitdir,
+  fs,
+  filepath,
+  index,
+  force,
+  parallel,
+}) {
   // TODO: Should ignore UNLESS it's already in the index.
-  const ignored = await GitIgnoreManager.isIgnored({
-    fs,
-    dir,
-    gitdir,
-    filepath,
+  filepath = Array.isArray(filepath) ? filepath : [filepath];
+  const promises = filepath.map(async currentFilepath => {
+    if (!force) {
+      const ignored = await GitIgnoreManager.isIgnored({
+        fs,
+        dir,
+        gitdir,
+        filepath: currentFilepath,
+      });
+      if (ignored) return
+    }
+    const stats = await fs.lstat(join(dir, currentFilepath));
+    if (!stats) throw new NotFoundError(currentFilepath)
+
+    if (stats.isDirectory()) {
+      const children = await fs.readdir(join(dir, currentFilepath));
+      if (parallel) {
+        const promises = children.map(child =>
+          addToIndex({
+            dir,
+            gitdir,
+            fs,
+            filepath: [join(currentFilepath, child)],
+            index,
+            force,
+            parallel,
+          })
+        );
+        await Promise.all(promises);
+      } else {
+        for (const child of children) {
+          await addToIndex({
+            dir,
+            gitdir,
+            fs,
+            filepath: [join(currentFilepath, child)],
+            index,
+            force,
+            parallel,
+          });
+        }
+      }
+    } else {
+      const object = stats.isSymbolicLink()
+        ? await fs.readlink(join(dir, currentFilepath)).then(posixifyPathBuffer)
+        : await fs.read(join(dir, currentFilepath));
+      if (object === null) throw new NotFoundError(currentFilepath)
+      const oid = await _writeObject({ fs, gitdir, type: 'blob', object });
+      index.insert({ filepath: currentFilepath, stats, oid });
+    }
   });
-  if (ignored) return
-  const stats = await fs.lstat(join(dir, filepath));
-  if (!stats) throw new NotFoundError(filepath)
-  if (stats.isDirectory()) {
-    const children = await fs.readdir(join(dir, filepath));
-    const promises = children.map(child =>
-      addToIndex({ dir, gitdir, fs, filepath: join(filepath, child), index })
-    );
-    await Promise.all(promises);
-  } else {
-    const object = stats.isSymbolicLink()
-      ? await fs.readlink(join(dir, filepath)).then(posixifyPathBuffer)
-      : await fs.read(join(dir, filepath));
-    if (object === null) throw new NotFoundError(filepath)
-    const oid = await _writeObject({ fs, gitdir, type: 'blob', object });
-    index.insert({ filepath, stats, oid });
+
+  const settledPromises = await Promise.allSettled(promises);
+  const rejectedPromises = settledPromises
+    .filter(settle => settle.status === 'rejected')
+    .map(settle => settle.reason);
+  if (rejectedPromises.length > 1) {
+    throw new MultipleGitError(rejectedPromises)
   }
+  if (rejectedPromises.length === 1) {
+    throw rejectedPromises[0]
+  }
+
+  const fulfilledPromises = settledPromises
+    .filter(settle => settle.status === 'fulfilled' && settle.value)
+    .map(settle => settle.value);
+
+  return fulfilledPromises
 }
 
 // @ts-check
@@ -8361,8 +8444,7 @@ function mergeFile({
   const theirs = theirContent.match(LINEBREAKS);
 
   // Here we let the diff3 library do the heavy lifting.
-  const result = diff3Merge(ours, base, theirs);
-
+  const result = diff3Merge(ours, base, theirs);  
   // Here we note whether there are conflicts and format the results
   let mergedText = '';
   let cleanMerge = true;
@@ -8469,7 +8551,7 @@ async function mergeTree({
             : undefined
         }
         case 'true-true': {
-          // Modifications
+          // Base case, no alterations except for just passing through the asyncMergeConflictCallback in the event it's not a clean merge
           if (
             ours &&
             base &&
@@ -8491,10 +8573,77 @@ async function mergeTree({
               asyncMergeConflictCallback,
             })
           }
-          // all other types of conflicts fail
+          // case: base doesn't have the file, was added in both ours and theirs
+          else if (
+            base === null && 
+            (await ours.type()) === 'blob' &&
+            (await theirs.type()) === 'blob'
+          ) {
+            return mergeBlobs({
+              fs,
+              gitdir,
+              path,
+              ours,
+              base,
+              theirs,
+              ourName,
+              theirName,
+              asyncMergeConflictCallback,
+            })
+          }
+          //case: this happens when both repos introduce a new directory
+          else if (base === null && (await ours.type()) === 'tree' && (await theirs.type()) === 'tree') {
+            //if we have ours, then use ours to introduce the directory, since it's a directory this doesn't matter where it actually comes from
+            return ours
+            ? {
+                mode: await ours.mode(),
+                path,
+                oid: await ours.oid(),
+                type: await ours.type(),
+              }
+            : undefined
+          }
+          //case: deleted in both, but was in base
+            else if (base !== null && !ours && !theirs) {
+              //returning undefined prunes the file/directory, since it was deleted in both, that's what we want
+            return undefined;
+          }
+          //case: base has file, we made change with file, theirs was delete
+          else if (base !== null && !!ours && !theirs && (await ours.type()) === 'blob') {
+            //let the user decide using the conflict resolution tool
+            return mergeBlobs({
+              fs,
+              gitdir,
+              path,
+              ours,
+              base,
+              theirs,
+              ourName,
+              theirName,
+              asyncMergeConflictCallback,
+            })
+          }
+
+          //case: base has file, we delete file, theirs was change
+          else if (base !== null && !!theirs && !ours && (await theirs.type()) === 'blob') {
+            return mergeBlobs({
+              fs,
+              gitdir,
+              path,
+              ours,
+              base,
+              theirs,
+              ourName,
+              theirName,
+              asyncMergeConflictCallback,
+            })
+          }
+          
+          //not really sure what's not covered by above, but this is a fallback
           throw new MergeNotSupportedError()
         }
         default: {
+          //case: we should never land here
           throw new MergeNotSupportedError()
         }
       }
@@ -8586,41 +8735,80 @@ async function mergeBlobs({
   dryRun,
   asyncMergeConflictCallback,
 }) {
+  //if ours or theirs is null (not typically handled, but now I'm adding support for it maybe?)
+  //let the user provide a mergeText, if it's empty string, then we want to delete so return undefined
+  //if not undefined then we writeObject as before.
   const type = 'blob';
   // Compute the new mode.
   // Since there are ONLY two valid blob modes ('100755' and '100644') it boils down to this
-  const mode =
-    (await base.mode()) === (await ours.mode())
-      ? await theirs.mode()
-      : await ours.mode();
-  // The trivial case: nothing to merge except maybe mode
-  if ((await ours.oid()) === (await theirs.oid())) {
-    return { mode, path, oid: await ours.oid(), type }
-  }
-  // if only one side made oid changes, return that side's oid
-  if ((await ours.oid()) === (await base.oid())) {
-    return { mode, path, oid: await theirs.oid(), type }
-  }
-  if ((await theirs.oid()) === (await base.oid())) {
-    return { mode, path, oid: await ours.oid(), type }
+  let ourMode = !!ours ? await ours.mode() : null;
+  let theirMode = !!theirs ? await theirs.mode() : null;
+  let baseMode = !!base ? await base.mode() : null;
+  if (!!baseMode && !!ourMode && !!theirMode) {
+    const mode = baseMode === ourMode ? theirMode : ourMode;
+    const baseOID = await base.oid();
+    const oursOID = await ours.oid();
+    const theirsOID = await theirs.oid();
+    // The trivial case: nothing to merge except maybe mode
+    if (oursOID === theirsOID) {
+      return { mode, path, oid: oursOID, type }
+    }
+    // if only one side made oid changes, return that side's oid
+    if (oursOID === baseOID) {
+      return { mode, path, oid: await theirsOID, type }
+    }
+    if (theirsOID === baseOID) {
+      return { mode, path, oid: await oursOID, type }
+    }
   }
   // if both sides made changes do a merge
+  let baseContent = "";
+  let ourContent = "";
+  let theirContent = "";
+  try {
+    baseContent = Buffer.from(await base.content()).toString('utf8');
+  } catch {
+  }
+
+  try {
+    ourContent = Buffer.from(await ours.content()).toString('utf8');
+  } catch {
+  }
+
+  try {
+    theirContent = Buffer.from(await theirs.content()).toString('utf8');
+  } catch {
+  }
   const { mergedText, cleanMerge } = mergeFile({
-    ourContent: Buffer.from(await ours.content()).toString('utf8'),
-    baseContent: Buffer.from(await base.content()).toString('utf8'),
-    theirContent: Buffer.from(await theirs.content()).toString('utf8'),
+    ourContent,
+    baseContent,
+    theirContent,
     ourName,
     theirName,
     baseName,
     format,
     markerSize,
   });
+
   let awaitedMergedText = mergedText;
   if (!cleanMerge) {
     // all other types of conflicts fail
     try {
-      awaitedMergedText = await asyncMergeConflictCallback(mergedText, base._fullpath);
+      let fullpath = "";
+      try {
+        //possibly null
+        fullpath = base._fullpath;
+      }catch(error) {
+        //get the path
+        fullpath = ours?._fullpath || theirs._fullpath;
+      }
+      awaitedMergedText = await asyncMergeConflictCallback(mergedText, fullpath);
+      //the user deleted all the text, we remove the file
+      if (!awaitedMergedText) {
+        return undefined;
+      }
     } catch (error) {
+      //if the user aborts the asyncMergeConflictCallback, bail out and tell them it failed
       throw new MergeNotSupportedError()
     }
   }
@@ -8632,7 +8820,7 @@ async function mergeBlobs({
     object: Buffer.from(awaitedMergedText, 'utf8'),
     dryRun,
   });
-  return { mode, path, oid, type }
+  return { mode:ourMode ?? theirMode, path, oid, type }
 }
 
 // @ts-check
@@ -8749,7 +8937,7 @@ async function _merge({
     if (fastForwardOnly) {
       throw new FastForwardError()
     }
-    // try a fancier merge
+      // try a fancier merge
     const tree = await mergeTree({
       fs,
       cache,
@@ -8789,7 +8977,8 @@ async function _merge({
       tree,
       mergeCommit: true,
     }
-  }
+
+    }
 }
 
 // @ts-check
@@ -12448,7 +12637,7 @@ async function readTree({
  * @param {FsClient} args.fs - a file system client
  * @param {string} [args.dir] - The [working tree](dir-vs-gitdir.md) directory path
  * @param {string} [args.gitdir=join(dir, '.git')] - [required] The [git directory](dir-vs-gitdir.md) path
- * @param {string} args.filepath - The path to the file to remove from the index
+ * @param {string|string[]} args.filepath - The path to the file to remove from the index
  * @param {object} [args.cache] - a [cache](cache.md) object
  *
  * @returns {Promise<void>} Resolves successfully once the git index has been updated
@@ -12469,11 +12658,13 @@ async function remove({
     assertParameter('fs', _fs);
     assertParameter('gitdir', gitdir);
     assertParameter('filepath', filepath);
-
+    const filePaths = Array.isArray(filepath) ? filepath : [filepath];
     await GitIndexManager.acquire(
       { fs: new FileSystem(_fs), gitdir, cache },
       async function(index) {
-        index.delete({ filepath });
+        for (let filepath of filePaths) {
+          index.delete({ filepath });
+        }
       }
     );
   } catch (err) {
