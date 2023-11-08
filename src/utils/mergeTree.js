@@ -10,6 +10,7 @@ import { _writeObject as writeObject } from '../storage/writeObject.js'
 import { basename } from './basename.js'
 import { join } from './join.js'
 import { mergeFile } from './mergeFile.js'
+import { MergeAbortedError } from '../errors/MergeAbortedError.js'
 
 /**
  * Create a merged tree
@@ -244,7 +245,11 @@ async function mergeBlobs({
     try {
       awaitedMergedText = await asyncMergeConflictCallback(mergedText, base._fullpath)
     } catch (error) {
-      throw new MergeNotSupportedError()
+      if (error instanceof Error && error.message === "Aborted merge") {
+        throw new MergeAbortedError()
+      } else {
+        throw new MergeNotSupportedError()
+      }
     }
   }
 
