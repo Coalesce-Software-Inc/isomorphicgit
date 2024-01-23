@@ -350,7 +350,7 @@ async function mergeBlobs({
         return undefined;
       }
     } catch (error) {
-      if (error instanceof Error && error.message === "Aborted merge") {
+      if (error?.message === "Aborted merge") {
         throw new MergeAbortedError()
       } else {
         throw new MergeNotSupportedError()
