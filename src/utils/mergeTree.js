@@ -10,6 +10,7 @@ import { _writeObject as writeObject } from '../storage/writeObject.js'
 import { basename } from './basename.js'
 import { join } from './join.js'
 import { mergeFile } from './mergeFile.js'
+import { MergeAbortedError } from '../errors/MergeAbortedError.js'
 
 /**
  * Create a merged tree
@@ -343,14 +344,22 @@ async function mergeBlobs({
         //get the path
         fullpath = ours?._fullpath || theirs._fullpath
       }
-      awaitedMergedText = await asyncMergeConflictCallback(mergedText, fullpath);
+
+      try {
+        awaitedMergedText = await asyncMergeConflictCallback(mergedText, fullpath);
+      } catch (error) {
+        throw new Error("Foo")
+      }
       //the user deleted all the text, we remove the file
       if (!awaitedMergedText) {
         return undefined;
       }
     } catch (error) {
-      //if the user aborts the asyncMergeConflictCallback, bail out and tell them it failed
-      throw new MergeNotSupportedError()
+      if (error?.message === "Aborted merge") {
+        throw new MergeAbortedError()
+      } else {
+        throw new MergeNotSupportedError()
+      }
     }
   }
 

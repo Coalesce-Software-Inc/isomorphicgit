@@ -4176,6 +4176,8 @@ class FileSystem {
     } catch (err) {
       if (err.code === 'ENOENT' || err.code === 'ENOTDIR') {
         return false
+      } else if (err.code === "EEXISTS") {
+        return true
       } else {
         console.log('Unhandled error in "FileSystem.exists()" function', err);
         throw err
