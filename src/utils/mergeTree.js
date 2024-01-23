@@ -344,7 +344,12 @@ async function mergeBlobs({
         //get the path
         fullpath = ours?._fullpath || theirs._fullpath
       }
-      awaitedMergedText = await asyncMergeConflictCallback(mergedText, fullpath);
+
+      try {
+        awaitedMergedText = await asyncMergeConflictCallback(mergedText, fullpath);
+      } catch (error) {
+        throw new Error("Foo")
+      }
       //the user deleted all the text, we remove the file
       if (!awaitedMergedText) {
         return undefined;
