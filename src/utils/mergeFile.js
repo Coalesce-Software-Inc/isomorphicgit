@@ -17,7 +17,8 @@ export function mergeFile({
   const theirs = theirContent.match(LINEBREAKS)
 
   // Here we let the diff3 library do the heavy lifting.
-  const result = diff3Merge(ours, base, theirs)  
+  const result = diff3Merge(ours, base, theirs)
+
   // Here we note whether there are conflicts and format the results
   let mergedText = ''
   let cleanMerge = true
@@ -38,5 +39,5 @@ export function mergeFile({
       mergedText += `${'>'.repeat(markerSize)} ${theirName}\n`
     }
   }
-  return { cleanMerge, mergedText }
+  return { cleanMerge, mergedText, ours, theirs, diffResult: result }
 }

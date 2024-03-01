@@ -8448,7 +8448,8 @@ function mergeFile({
   const theirs = theirContent.match(LINEBREAKS);
 
   // Here we let the diff3 library do the heavy lifting.
-  const result = diff3Merge(ours, base, theirs);  
+  const result = diff3Merge(ours, base, theirs);
+
   // Here we note whether there are conflicts and format the results
   let mergedText = '';
   let cleanMerge = true;
@@ -8469,7 +8470,7 @@ function mergeFile({
       mergedText += `${'>'.repeat(markerSize)} ${theirName}\n`;
     }
   }
-  return { cleanMerge, mergedText }
+  return { cleanMerge, mergedText, ours, theirs, diffResult: result }
 }
 
 // @ts-check
@@ -8525,6 +8526,7 @@ async function mergeTree({
       // What we did, what they did
       const ourChange = await modified(ours, base);
       const theirChange = await modified(theirs, base);
+
       switch (`${ourChange}-${theirChange}`) {
         case 'false-false': {
           return {
@@ -8783,7 +8785,8 @@ async function mergeBlobs({
     theirContent = Buffer.from(await theirs.content()).toString('utf8');
   } catch {
   }
-  const { mergedText, cleanMerge } = mergeFile({
+  
+  const { mergedText, cleanMerge, ours: ourContentWithoutLineBreaks, theirs: theirContentWithoutLineBreaks, diffResult } = mergeFile({
     ourContent,
     baseContent,
     theirContent,
@@ -8806,7 +8809,7 @@ async function mergeBlobs({
         //get the path
         fullpath = ours?._fullpath || theirs._fullpath;
       }
-      awaitedMergedText = await asyncMergeConflictCallback(mergedText, fullpath);
+      awaitedMergedText = await asyncMergeConflictCallback(mergedText, fullpath, { content: ourContentWithoutLineBreaks, branch: ourName }, { content: theirContentWithoutLineBreaks, branch: theirName }, diffResult);
       //the user deleted all the text, we remove the file
       if (!awaitedMergedText) {
         return undefined;
