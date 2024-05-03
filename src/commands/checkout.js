@@ -5,6 +5,7 @@ import { STAGE } from '../commands/STAGE.js'
 import { TREE } from '../commands/TREE.js'
 import { WORKDIR } from '../commands/WORKDIR.js'
 import { _walk } from '../commands/walk.js'
+import { _readTree } from "../commands/readTree.js"
 import { CheckoutConflictError } from '../errors/CheckoutConflictError.js'
 import { CommitNotFetchedError } from '../errors/CommitNotFetchedError.js'
 import { InternalError } from '../errors/InternalError.js'
@@ -87,6 +88,9 @@ export async function _checkout({
     let ops
     // First pass - just analyze files (not directories) and figure out what needs to be done
     try {
+      if(onProgress) {
+        await onProgress({ total: 0, phase: "pre-analyze", loaded: 0});
+      }
       ops = await analyze({
         fs,
         cache,
@@ -105,7 +109,10 @@ export async function _checkout({
         throw err
       }
     }
-
+    if(onProgress) {
+      await onProgress({ total: 0, phase: "post-analyze", loaded: 0});
+    }
+  
     // Report conflicts
     const conflicts = ops
       .filter(([method]) => method === 'conflict')
@@ -134,21 +141,27 @@ export async function _checkout({
 
     let count = 0
     const total = ops.length
+    //if we're going to do a majority of just pure file writes/updates, then lets read
     await GitIndexManager.acquire({ fs, gitdir, cache }, async function(index) {
+      //delete many only when fs has correct extra method
+      if (fs._unlinkMany) {
+        const deleteOps = ops.filter(([method])=> method === "delete").map(([method, fullpath]) => `${dir}/${fullpath}`);
+        await fs.rmMany(deleteOps);
+      }
       await Promise.all(
         ops
           .filter(
             ([method]) => method === 'delete' || method === 'delete-index'
           )
           .map(async function([method, fullpath]) {
-            const filepath = `${dir}/${fullpath}`
-            if (method === 'delete') {
-              await fs.rm(filepath)
+            if (!fs._unlinkMany && method === 'delete') {	
+              const filepath = `${dir}/${fullpath}`	
+              await fs.rm(filepath)	
             }
             index.delete({ filepath: fullpath })
             if (onProgress) {
               await onProgress({
-                phase: 'Updating workdir',
+                phase: 'Updating workdir: rm',
                 loaded: ++count,
                 total,
               })
@@ -169,7 +182,7 @@ export async function _checkout({
             await fs.rmdir(filepath)
             if (onProgress) {
               await onProgress({
-                phase: 'Updating workdir',
+                phase: 'Updating workdir: rmdir',
                 loaded: ++count,
                 total,
               })
@@ -195,7 +208,7 @@ export async function _checkout({
           await fs.mkdir(filepath)
           if (onProgress) {
             await onProgress({
-              phase: 'Updating workdir',
+              phase: 'Updating workdir: mkdir',
               loaded: ++count,
               total,
             })
@@ -204,6 +217,53 @@ export async function _checkout({
     )
 
     await GitIndexManager.acquire({ fs, gitdir, cache }, async function(index) {
+      //only execute this enhanced performance methodology if our fs has the required internal functions, otherwise run the standard path
+      if (fs._writeFiles && fs._unlinkMany) {
+        const writeOps = ops.filter(([method]) => method === "create" || method === "update");
+        const deletes = [];
+        const modeWrites = [];
+        const symlinkWrites = [];
+        const regularWrites = [];
+        for (const [_method, fullpath, oid, mode, chmod] of writeOps) {
+          const filepath = `${dir}/${fullpath}`;
+          if (chmod) {
+            deletes.push(filepath);
+          }
+          const { object } = await readObject({ fs, cache, gitdir, oid });
+          const write = [filepath, object];
+          if (mode === 0o100644) {
+            regularWrites.push(write)
+          } else if (mode === 0o100755) {
+            modeWrites.push(write)
+          } else if (mode === 0o120000) {
+            symlinkWrites.push(write)
+          } else {
+            throw new InternalError(
+              `Invalid mode 0o${mode.toString(8)} detected in blob ${oid}`
+            )
+          }
+        }
+  
+        await fs.rmMany(deletes);
+        if (onProgress) {
+          await onProgress({ loaded: 0, total: 0, phase: "deleted files for chmod reasons"})
+        }
+  
+        await fs.writeFiles(regularWrites, {});
+        if (onProgress) {
+          await onProgress({ loaded: 0, total: regularWrites.length, phase: "wrote regular files"})
+        }
+        await fs.writeFiles(modeWrites, { mode: 0o777 });
+        if (onProgress) {
+          await onProgress({ loaded: 0, total: modeWrites.length, phase: "wrote mode files"})
+        }
+        await Promise.all(symlinkWrites.map(([filepath, data]) => fs.writelink(filepath, data)));
+        if (onProgress) {
+          await onProgress({ loaded: 0, total: symlinkWrites.length, phase: "wrote symlink files"})
+        }
+
+      }
+
       await Promise.all(
         ops
           .filter(
@@ -216,7 +276,7 @@ export async function _checkout({
           .map(async function([method, fullpath, oid, mode, chmod]) {
             const filepath = `${dir}/${fullpath}`
             try {
-              if (method !== 'create-index' && method !== 'mkdir-index') {
+              if (!fs._writeFiles && method !== 'create-index' && method !== 'mkdir-index') {
                 const { object } = await readObject({ fs, cache, gitdir, oid })
                 if (chmod) {
                   // Note: the mode option of fs.write only works when creating files,
@@ -239,7 +299,6 @@ export async function _checkout({
                   )
                 }
               }
-
               const stats = await fs.lstat(filepath)
               // We can't trust the executable bit returned by lstat on Windows,
               // so we need to preserve this value from the TREE.
@@ -256,9 +315,10 @@ export async function _checkout({
                 stats,
                 oid,
               })
+
               if (onProgress) {
                 await onProgress({
-                  phase: 'Updating workdir',
+                  phase: 'Updating workdir: write post',
                   loaded: ++count,
                   total,
                 })
@@ -287,6 +347,29 @@ export async function _checkout({
     }
   }
 }
+
+async function readAllFiles({
+  fs,
+  gitdir,
+  ref,
+}) {
+  const cache = {}
+  const treeResult = await _readTree({ fs, gitdir, oid: ref, cache });
+  return _walk({ fs, gitdir, cache, trees: [TREE({ref: treeResult.oid})], map: async (fileName, entries) => {
+    const fileReadResult = { filePath: fileName, fileData: ""};
+        //if there's content, use it, otherwise return an "empty" FileReadResult
+        if (entries[0]) {
+          const content = await entries[0].content();
+          if (content && typeof content === "object") {
+            fileReadResult.fileData = content;
+          } else {
+            fileReadResult.type = "Directory";
+          }
+        }
+        return fileReadResult;
+  }});
+}
+
 
 async function analyze({
   fs,

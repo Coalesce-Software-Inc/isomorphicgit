@@ -4445,6 +4445,15 @@ class FileSystem {
       } else {
         this._rm = rmRecursive.bind(null, this);
       }
+      if (fs.promises.readFiles) {
+        this._readFiles = fs.promises.readFiles.bind(fs.promises);
+      }
+      if (fs.promises.writeFiles) {
+        this._writeFiles = fs.promises.writeFiles.bind(fs.promises);
+      }
+      if (fs.promises.unlinkMany) {
+        this._unlinkMany = fs.promises.unlinkMany.bind(fs.promises);
+      }
       this._rmdir = fs.promises.rmdir.bind(fs.promises);
       this._unlink = fs.promises.unlink.bind(fs.promises);
       this._stat = fs.promises.stat.bind(fs.promises);
@@ -4512,6 +4521,21 @@ class FileSystem {
       return null
     }
   }
+    /**
+   * 
+   * @param {array} filepaths 
+   * @param {object|string} options 
+   * @returns {Promise<Buffer[]|string[]|null[]>}
+   */
+    async readFiles(filepaths, options = {}) {
+      const reads = await this._readFiles(filepaths);
+      return reads.map((read) => {
+        if (typeof read !== "string") {
+          return Buffer.from(read)
+        }
+        return read;
+      });
+  }
 
   /**
    * Write a file (creating missing directories if need be) without throwing errors.
@@ -4529,6 +4553,17 @@ class FileSystem {
       await this.mkdir(dirname(filepath));
       await this._writeFile(filepath, contents, options);
     }
+  }
+
+  /**
+   * 
+   * @param {[filepath: string, content: Buffer|Uint8Array|string]} filepathsAndData 
+   * @param {object|string} options 
+   * @returns 
+   */
+  async writeFiles(filepathsAndData, options = {}) {
+      await this._writeFiles(filepathsAndData, options);
+      return;
   }
 
   /**
@@ -4567,6 +4602,17 @@ class FileSystem {
       if (err.code !== 'ENOENT') throw err
     }
   }
+
+    /**
+   * Delete a file without throwing an error if it is already deleted.
+   */
+    async rmMany(filepaths) {
+      try {
+        await this._unlinkMany(filepaths);
+      } catch (err) {
+        if (err.code !== 'ENOENT') throw err
+      }
+    }
 
   /**
    * Delete a directory without throwing an error if it is already deleted.
