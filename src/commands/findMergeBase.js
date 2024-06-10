@@ -8,9 +8,10 @@ import { _readObject as readObject } from '../storage/readObject.js'
  * @param {any} args.cache
  * @param {string} args.gitdir
  * @param {string[]} args.oids
+ * @param {function} args.logger
  *
  */
-export async function _findMergeBase({ fs, cache, gitdir, oids }) {
+export async function _findMergeBase({ fs, cache, gitdir, oids, logger }) {
   // Note: right now, the tests are geared so that the output should match that of
   // `git merge-base --all --octopus`
   // because without the --octopus flag, git's output seems to depend on the ORDER of the oids,
@@ -32,6 +33,10 @@ export async function _findMergeBase({ fs, cache, gitdir, oids }) {
       if (visits[oid].size === passes) {
         result.add(oid)
       }
+    }
+    if (logger) {
+      logger("Heads:" , heads);
+      logger("Visits: ", Object.keys(visits).length, visits);
     }
     if (result.size > 0) {
       return [...result]

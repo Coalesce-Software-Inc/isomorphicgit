@@ -60,6 +60,7 @@ const DummyAsyncCallback = async function(file) {
  * @param {object} [args.cache] - a [cache](cache.md) object
  * @param {function} [args.asyncMergeConflictCallback] - merge conflict resolution callback
  * @param {function} [args.iterateOverride] - over-write the default walker iterate function
+ * @param {function} [args.logger] - passed in logger to assist with debugging
  * @returns {Promise<MergeResult>} Resolves to a description of the merge operation
  * @see MergeResult
  *
@@ -90,6 +91,7 @@ export async function merge({
   cache = {},
   asyncMergeConflictCallback = DummyAsyncCallback,
   iterateOverride,
+  logger,
 }) {
   try {
     assertParameter('fs', _fs)
@@ -127,6 +129,7 @@ export async function merge({
       onSign,
       asyncMergeConflictCallback,
       iterateOverride,
+      logger,
     })
   } catch (err) {
     err.caller = 'git.merge'

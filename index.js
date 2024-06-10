@@ -5862,51 +5862,51 @@ async function _checkout({
 
     await GitIndexManager.acquire({ fs, gitdir, cache }, async function(index) {
       //only execute this enhanced performance methodology if our fs has the required internal functions, otherwise run the standard path
-      if (fs._writeFiles && fs._unlinkMany) {
-        const writeOps = ops.filter(([method]) => method === "create" || method === "update");
-        const deletes = [];
-        const modeWrites = [];
-        const symlinkWrites = [];
-        const regularWrites = [];
-        for (const [_method, fullpath, oid, mode, chmod] of writeOps) {
-          const filepath = `${dir}/${fullpath}`;
-          if (chmod) {
-            deletes.push(filepath);
-          }
-          const { object } = await _readObject({ fs, cache, gitdir, oid });
-          const write = [filepath, object];
-          if (mode === 0o100644) {
-            regularWrites.push(write);
-          } else if (mode === 0o100755) {
-            modeWrites.push(write);
-          } else if (mode === 0o120000) {
-            symlinkWrites.push(write);
-          } else {
-            throw new InternalError(
-              `Invalid mode 0o${mode.toString(8)} detected in blob ${oid}`
-            )
-          }
-        }
+      // if (fs._writeFiles && fs._unlinkMany) {
+      //   const writeOps = ops.filter(([method]) => method === "create" || method === "update");
+      //   const deletes = [];
+      //   const modeWrites = [];
+      //   const symlinkWrites = [];
+      //   const regularWrites = [];
+      //   for (const [_method, fullpath, oid, mode, chmod] of writeOps) {
+      //     const filepath = `${dir}/${fullpath}`;
+      //     if (chmod) {
+      //       deletes.push(filepath);
+      //     }
+      //     const { object } = await readObject({ fs, cache, gitdir, oid });
+      //     const write = [filepath, object];
+      //     if (mode === 0o100644) {
+      //       regularWrites.push(write)
+      //     } else if (mode === 0o100755) {
+      //       modeWrites.push(write)
+      //     } else if (mode === 0o120000) {
+      //       symlinkWrites.push(write)
+      //     } else {
+      //       throw new InternalError(
+      //         `Invalid mode 0o${mode.toString(8)} detected in blob ${oid}`
+      //       )
+      //     }
+      //   }
   
-        await fs.rmMany(deletes);
-        if (onProgress) {
-          await onProgress({ loaded: 0, total: 0, phase: "deleted files for chmod reasons"});
-        }
+      //   await fs.rmMany(deletes);
+      //   if (onProgress) {
+      //     await onProgress({ loaded: 0, total: 0, phase: "deleted files for chmod reasons"})
+      //   }
   
-        await fs.writeFiles(regularWrites, {});
-        if (onProgress) {
-          await onProgress({ loaded: 0, total: regularWrites.length, phase: "wrote regular files"});
-        }
-        await fs.writeFiles(modeWrites, { mode: 0o777 });
-        if (onProgress) {
-          await onProgress({ loaded: 0, total: modeWrites.length, phase: "wrote mode files"});
-        }
-        await Promise.all(symlinkWrites.map(([filepath, data]) => fs.writelink(filepath, data)));
-        if (onProgress) {
-          await onProgress({ loaded: 0, total: symlinkWrites.length, phase: "wrote symlink files"});
-        }
+      //   await fs.writeFiles(regularWrites, {});
+      //   if (onProgress) {
+      //     await onProgress({ loaded: 0, total: regularWrites.length, phase: "wrote regular files", extra: regularWrites })
+      //   }
+      //   await fs.writeFiles(modeWrites, { mode: 0o777 });
+      //   if (onProgress) {
+      //     await onProgress({ loaded: 0, total: modeWrites.length, phase: "wrote mode files", extra: modeWrites })
+      //   }
+      //   await Promise.all(symlinkWrites.map(([filepath, data]) => fs.writelink(filepath, data)));
+      //   if (onProgress) {
+      //     await onProgress({ loaded: 0, total: symlinkWrites.length, phase: "wrote symlink files", extra: symlinkWrites })
+      //   }
 
-      }
+      // }
 
       await Promise.all(
         ops
@@ -5920,8 +5920,16 @@ async function _checkout({
           .map(async function([method, fullpath, oid, mode, chmod]) {
             const filepath = `${dir}/${fullpath}`;
             try {
-              if (!fs._writeFiles && method !== 'create-index' && method !== 'mkdir-index') {
+              // if (!fs._writeFiles && method !== 'create-index' && method !== 'mkdir-index') {
                 const { object } = await _readObject({ fs, cache, gitdir, oid });
+                if (onProgress) {
+                  await onProgress({
+                    phase: 'Updating workdir: write post',
+                    loaded: ++count,
+                    total,
+                    extra: [filepath, object]
+                  });
+                }
                 if (chmod) {
                   // Note: the mode option of fs.write only works when creating files,
                   // not updating them. Since the `fs` plugin doesn't expose `chmod` this
@@ -5942,7 +5950,7 @@ async function _checkout({
                     `Invalid mode 0o${mode.toString(8)} detected in blob ${oid}`
                   )
                 }
-              }
+              // }
               const stats = await fs.lstat(filepath);
               // We can't trust the executable bit returned by lstat on Windows,
               // so we need to preserve this value from the TREE.
@@ -8504,9 +8512,10 @@ async function expandRef({ fs, dir, gitdir = join(dir, '.git'), ref }) {
  * @param {any} args.cache
  * @param {string} args.gitdir
  * @param {string[]} args.oids
+ * @param {function} args.logger
  *
  */
-async function _findMergeBase({ fs, cache, gitdir, oids }) {
+async function _findMergeBase({ fs, cache, gitdir, oids, logger }) {
   // Note: right now, the tests are geared so that the output should match that of
   // `git merge-base --all --octopus`
   // because without the --octopus flag, git's output seems to depend on the ORDER of the oids,
@@ -8528,6 +8537,10 @@ async function _findMergeBase({ fs, cache, gitdir, oids }) {
       if (visits[oid].size === passes) {
         result.add(oid);
       }
+    }
+    if (logger) {
+      logger("Heads:" , heads);
+      logger("Visits: ", Object.keys(visits).length, visits);
     }
     if (result.size > 0) {
       return [...result]
@@ -8613,6 +8626,7 @@ function mergeFile({
  * @param {string} [args.theirName='theirs'] - The name to use in conflicted files for their hunks
  * @param {boolean} [args.dryRun=false]
  * @param {function} [args.asyncMergeConflictCallback] - The function to allow for async user resolution of conflicts
+ * @param {function} [args.logger] - The function to allow for logging internal errors
  * @param {function} [args.iterateOverride] - overwrite the default iterate functionality for mergeTree
  * @returns {Promise<string>} - The SHA-1 object id of the merged tree
  *
@@ -8630,6 +8644,7 @@ async function mergeTree({
   theirName = 'theirs',
   dryRun = false,
   asyncMergeConflictCallback,
+  logger,
   iterateOverride,
 }) {
   const ourTree = TREE({ ref: ourOid });
@@ -8648,7 +8663,9 @@ async function mergeTree({
       // What we did, what they did
       const ourChange = await modified(ours, base);
       const theirChange = await modified(theirs, base);
-
+      if (logger) {
+        logger("HEEHO ours-theirs", ourChange, theirChange);
+      }
       switch (`${ourChange}-${theirChange}`) {
         case 'false-false': {
           return {
@@ -8679,6 +8696,9 @@ async function mergeTree({
             : undefined
         }
         case 'true-true': {
+          if (logger) {
+            logger("Expected case for conflicts", ours, base, theirs);
+          }
           // Base case, no alterations except for just passing through the asyncMergeConflictCallback in the event it's not a clean merge
           if (
             ours &&
@@ -8771,6 +8791,9 @@ async function mergeTree({
           throw new MergeNotSupportedError()
         }
         default: {
+          if (logger) {
+            logger("Default case!", ourChange, theirChange);
+          }
           //case: we should never land here
           throw new MergeNotSupportedError()
         }
@@ -8990,6 +9013,7 @@ async function mergeBlobs({
  * @param {string} [args.signingKey]
  * @param {SignCallback} [args.onSign] - a PGP signing implementation
  * @param {function} [args.asyncMergeConflictCallback]
+ * @param {function} [args.logger]
  * @param {function} [args.iterateOverride]
  *
  * @returns {Promise<MergeResult>} Resolves to a description of the merge operation
@@ -9010,6 +9034,7 @@ async function _merge({
   signingKey,
   onSign,
   asyncMergeConflictCallback,
+  logger,
   iterateOverride,
 }) {
   if (ours === undefined) {
@@ -9041,10 +9066,16 @@ async function _merge({
     cache,
     gitdir,
     oids: [ourOid, theirOid],
+    logger: logger ? logger : (_input) => {},
   });
+  //if the base length is 0, we throw
   if (baseOids.length !== 1) {
+    if (logger) {
+      logger("BaseOids !== 1", baseOids);
+    }
     throw new MergeNotSupportedError()
   }
+  //else we need to find the oid that occurred most recently from the base list (when len > 1), otherwise just use [0];
   const baseOid = baseOids[0];
   // handle fast-forward case
   if (baseOid === theirOid) {
@@ -9079,6 +9110,7 @@ async function _merge({
       theirName: theirs,
       dryRun,
       asyncMergeConflictCallback,
+      logger,
       iterateOverride,
     });
     if (!message) {
@@ -11206,6 +11238,7 @@ const DummyAsyncCallback = async function(file) {
  * @param {object} [args.cache] - a [cache](cache.md) object
  * @param {function} [args.asyncMergeConflictCallback] - merge conflict resolution callback
  * @param {function} [args.iterateOverride] - over-write the default walker iterate function
+ * @param {function} [args.logger] - passed in logger to assist with debugging
  * @returns {Promise<MergeResult>} Resolves to a description of the merge operation
  * @see MergeResult
  *
@@ -11236,6 +11269,7 @@ async function merge({
   cache = {},
   asyncMergeConflictCallback = DummyAsyncCallback,
   iterateOverride,
+  logger,
 }) {
   try {
     assertParameter('fs', _fs);
@@ -11273,6 +11307,7 @@ async function merge({
       onSign,
       asyncMergeConflictCallback,
       iterateOverride,
+      logger,
     })
   } catch (err) {
     err.caller = 'git.merge';

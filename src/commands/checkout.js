@@ -218,51 +218,51 @@ export async function _checkout({
 
     await GitIndexManager.acquire({ fs, gitdir, cache }, async function(index) {
       //only execute this enhanced performance methodology if our fs has the required internal functions, otherwise run the standard path
-      if (fs._writeFiles && fs._unlinkMany) {
-        const writeOps = ops.filter(([method]) => method === "create" || method === "update");
-        const deletes = [];
-        const modeWrites = [];
-        const symlinkWrites = [];
-        const regularWrites = [];
-        for (const [_method, fullpath, oid, mode, chmod] of writeOps) {
-          const filepath = `${dir}/${fullpath}`;
-          if (chmod) {
-            deletes.push(filepath);
-          }
-          const { object } = await readObject({ fs, cache, gitdir, oid });
-          const write = [filepath, object];
-          if (mode === 0o100644) {
-            regularWrites.push(write)
-          } else if (mode === 0o100755) {
-            modeWrites.push(write)
-          } else if (mode === 0o120000) {
-            symlinkWrites.push(write)
-          } else {
-            throw new InternalError(
-              `Invalid mode 0o${mode.toString(8)} detected in blob ${oid}`
-            )
-          }
-        }
+      // if (fs._writeFiles && fs._unlinkMany) {
+      //   const writeOps = ops.filter(([method]) => method === "create" || method === "update");
+      //   const deletes = [];
+      //   const modeWrites = [];
+      //   const symlinkWrites = [];
+      //   const regularWrites = [];
+      //   for (const [_method, fullpath, oid, mode, chmod] of writeOps) {
+      //     const filepath = `${dir}/${fullpath}`;
+      //     if (chmod) {
+      //       deletes.push(filepath);
+      //     }
+      //     const { object } = await readObject({ fs, cache, gitdir, oid });
+      //     const write = [filepath, object];
+      //     if (mode === 0o100644) {
+      //       regularWrites.push(write)
+      //     } else if (mode === 0o100755) {
+      //       modeWrites.push(write)
+      //     } else if (mode === 0o120000) {
+      //       symlinkWrites.push(write)
+      //     } else {
+      //       throw new InternalError(
+      //         `Invalid mode 0o${mode.toString(8)} detected in blob ${oid}`
+      //       )
+      //     }
+      //   }
   
-        await fs.rmMany(deletes);
-        if (onProgress) {
-          await onProgress({ loaded: 0, total: 0, phase: "deleted files for chmod reasons"})
-        }
+      //   await fs.rmMany(deletes);
+      //   if (onProgress) {
+      //     await onProgress({ loaded: 0, total: 0, phase: "deleted files for chmod reasons"})
+      //   }
   
-        await fs.writeFiles(regularWrites, {});
-        if (onProgress) {
-          await onProgress({ loaded: 0, total: regularWrites.length, phase: "wrote regular files"})
-        }
-        await fs.writeFiles(modeWrites, { mode: 0o777 });
-        if (onProgress) {
-          await onProgress({ loaded: 0, total: modeWrites.length, phase: "wrote mode files"})
-        }
-        await Promise.all(symlinkWrites.map(([filepath, data]) => fs.writelink(filepath, data)));
-        if (onProgress) {
-          await onProgress({ loaded: 0, total: symlinkWrites.length, phase: "wrote symlink files"})
-        }
+      //   await fs.writeFiles(regularWrites, {});
+      //   if (onProgress) {
+      //     await onProgress({ loaded: 0, total: regularWrites.length, phase: "wrote regular files", extra: regularWrites })
+      //   }
+      //   await fs.writeFiles(modeWrites, { mode: 0o777 });
+      //   if (onProgress) {
+      //     await onProgress({ loaded: 0, total: modeWrites.length, phase: "wrote mode files", extra: modeWrites })
+      //   }
+      //   await Promise.all(symlinkWrites.map(([filepath, data]) => fs.writelink(filepath, data)));
+      //   if (onProgress) {
+      //     await onProgress({ loaded: 0, total: symlinkWrites.length, phase: "wrote symlink files", extra: symlinkWrites })
+      //   }
 
-      }
+      // }
 
       await Promise.all(
         ops
@@ -276,8 +276,16 @@ export async function _checkout({
           .map(async function([method, fullpath, oid, mode, chmod]) {
             const filepath = `${dir}/${fullpath}`
             try {
-              if (!fs._writeFiles && method !== 'create-index' && method !== 'mkdir-index') {
+              // if (!fs._writeFiles && method !== 'create-index' && method !== 'mkdir-index') {
                 const { object } = await readObject({ fs, cache, gitdir, oid })
+                if (onProgress) {
+                  await onProgress({
+                    phase: 'Updating workdir: write post',
+                    loaded: ++count,
+                    total,
+                    extra: [filepath, object]
+                  })
+                }
                 if (chmod) {
                   // Note: the mode option of fs.write only works when creating files,
                   // not updating them. Since the `fs` plugin doesn't expose `chmod` this
@@ -298,7 +306,7 @@ export async function _checkout({
                     `Invalid mode 0o${mode.toString(8)} detected in blob ${oid}`
                   )
                 }
-              }
+              // }
               const stats = await fs.lstat(filepath)
               // We can't trust the executable bit returned by lstat on Windows,
               // so we need to preserve this value from the TREE.

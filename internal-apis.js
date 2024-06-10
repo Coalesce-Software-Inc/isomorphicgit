@@ -5418,6 +5418,7 @@ async function _walk({
  * @param {string} [args.theirName='theirs'] - The name to use in conflicted files for their hunks
  * @param {boolean} [args.dryRun=false]
  * @param {function} [args.asyncMergeConflictCallback] - The function to allow for async user resolution of conflicts
+ * @param {function} [args.logger] - The function to allow for logging internal errors
  * @param {function} [args.iterateOverride] - overwrite the default iterate functionality for mergeTree
  * @returns {Promise<string>} - The SHA-1 object id of the merged tree
  *
@@ -5435,6 +5436,7 @@ async function mergeTree({
   theirName = 'theirs',
   dryRun = false,
   asyncMergeConflictCallback,
+  logger,
   iterateOverride,
 }) {
   const ourTree = TREE({ ref: ourOid });
@@ -5453,7 +5455,9 @@ async function mergeTree({
       // What we did, what they did
       const ourChange = await modified(ours, base);
       const theirChange = await modified(theirs, base);
-
+      if (logger) {
+        logger("HEEHO ours-theirs", ourChange, theirChange);
+      }
       switch (`${ourChange}-${theirChange}`) {
         case 'false-false': {
           return {
@@ -5484,6 +5488,9 @@ async function mergeTree({
             : undefined
         }
         case 'true-true': {
+          if (logger) {
+            logger("Expected case for conflicts", ours, base, theirs);
+          }
           // Base case, no alterations except for just passing through the asyncMergeConflictCallback in the event it's not a clean merge
           if (
             ours &&
@@ -5576,6 +5583,9 @@ async function mergeTree({
           throw new MergeNotSupportedError()
         }
         default: {
+          if (logger) {
+            logger("Default case!", ourChange, theirChange);
+          }
           //case: we should never land here
           throw new MergeNotSupportedError()
         }
