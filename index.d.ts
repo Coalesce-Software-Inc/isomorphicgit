@@ -2120,7 +2120,6 @@ export function log({ fs, dir, gitdir, filepath, ref, depth, since, force, follo
  * @param {object} [args.cache] - a [cache](cache.md) object
  * @param {function} [args.asyncMergeConflictCallback] - merge conflict resolution callback
  * @param {function} [args.iterateOverride] - over-write the default walker iterate function
- * @param {function} [args.logger] - passed in logger to assist with debugging
  * @returns {Promise<MergeResult>} Resolves to a description of the merge operation
  * @see MergeResult
  *
@@ -2134,7 +2133,7 @@ export function log({ fs, dir, gitdir, filepath, ref, depth, since, force, follo
  * console.log(m)
  *
  */
-export function merge({ fs: _fs, onSign, dir, gitdir, ours, theirs, fastForwardOnly, dryRun, noUpdateBranch, message, author: _author, committer: _committer, signingKey, cache, asyncMergeConflictCallback, iterateOverride, logger, }: {
+export function merge({ fs: _fs, onSign, dir, gitdir, ours, theirs, fastForwardOnly, dryRun, noUpdateBranch, message, author: _author, committer: _committer, signingKey, cache, asyncMergeConflictCallback, iterateOverride, }: {
     fs: CallbackFsClient | PromiseFsClient;
     onSign?: SignCallback;
     dir?: string;
@@ -2161,7 +2160,6 @@ export function merge({ fs: _fs, onSign, dir, gitdir, ours, theirs, fastForwardO
     cache?: any;
     asyncMergeConflictCallback?: Function;
     iterateOverride?: Function;
-    logger?: Function;
 }): Promise<MergeResult>;
 /**
  *
