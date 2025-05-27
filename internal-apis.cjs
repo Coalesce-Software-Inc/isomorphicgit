@@ -4134,7 +4134,7 @@ async function parseRefsAdResponse(stream, { service }) {
 
 function splitAndAssert(line, sep, expected) {
   const split = line.trim().split(sep);
-  if (split.length !== 2) {
+  if (split.length < 2) {
     throw new ParseError(
       `Two strings separated by '${expected}'`,
       line.toString('utf8')
