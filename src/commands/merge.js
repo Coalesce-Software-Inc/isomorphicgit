@@ -46,7 +46,6 @@ import { mergeTree } from '../utils/mergeTree.js'
  * @param {string} [args.signingKey]
  * @param {SignCallback} [args.onSign] - a PGP signing implementation
  * @param {function} [args.asyncMergeConflictCallback]
- * @param {function} [args.logger]
  * @param {function} [args.iterateOverride]
  *
  * @returns {Promise<MergeResult>} Resolves to a description of the merge operation
@@ -67,7 +66,6 @@ export async function _merge({
   signingKey,
   onSign,
   asyncMergeConflictCallback,
-  logger,
   iterateOverride,
 }) {
   if (ours === undefined) {
@@ -99,16 +97,10 @@ export async function _merge({
     cache,
     gitdir,
     oids: [ourOid, theirOid],
-    logger: logger ? logger : (_input) => {},
   })
-  //if the base length is 0, we throw
   if (baseOids.length !== 1) {
-    if (logger) {
-      logger("BaseOids !== 1", baseOids);
-    }
     throw new MergeNotSupportedError()
   }
-  //else we need to find the oid that occurred most recently from the base list (when len > 1), otherwise just use [0];
   const baseOid = baseOids[0]
   // handle fast-forward case
   if (baseOid === theirOid) {
@@ -143,7 +135,6 @@ export async function _merge({
       theirName: theirs,
       dryRun,
       asyncMergeConflictCallback,
-      logger,
       iterateOverride,
     })
     if (!message) {
