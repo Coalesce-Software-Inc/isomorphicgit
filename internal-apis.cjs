@@ -5939,6 +5939,7 @@ function writeUploadPackRequest({
   wants = [],
   haves = [],
   shallows = [],
+  filter = null,
   depth = null,
   since = null,
   exclude = [],
@@ -5952,6 +5953,9 @@ function writeUploadPackRequest({
   }
   for (const oid of shallows) {
     packstream.push(GitPktLine.encode(`shallow ${oid}\n`));
+  }
+  if (filter !== null) {
+    packstream.push(GitPktLine.encode(`filter ${filter}\n`));
   }
   if (depth !== null) {
     packstream.push(GitPktLine.encode(`deepen ${depth}\n`));

@@ -7416,6 +7416,7 @@ function writeUploadPackRequest({
   wants = [],
   haves = [],
   shallows = [],
+  filter = null,
   depth = null,
   since = null,
   exclude = [],
@@ -7429,6 +7430,9 @@ function writeUploadPackRequest({
   }
   for (const oid of shallows) {
     packstream.push(GitPktLine.encode(`shallow ${oid}\n`));
+  }
+  if (filter !== null) {
+    packstream.push(GitPktLine.encode(`filter ${filter}\n`));
   }
   if (depth !== null) {
     packstream.push(GitPktLine.encode(`deepen ${depth}\n`));
@@ -7506,6 +7510,7 @@ async function _fetch({
   remote: _remote,
   url: _url,
   corsProxy,
+  filter = null,
   depth = null,
   since = null,
   exclude = [],
@@ -7560,6 +7565,9 @@ async function _fetch({
     }
   }
   // Check that the remote supports the requested features
+  if (filter !== null && !remoteHTTP.capabilities.has('filter')) {
+    throw new RemoteCapabilityError('filter', 'filter')
+  }
   if (depth !== null && !remoteHTTP.capabilities.has('shallow')) {
     throw new RemoteCapabilityError('shallow', 'depth')
   }
@@ -7635,6 +7643,7 @@ async function _fetch({
     wants,
     haves,
     shallows,
+    filter,
     depth,
     since,
     exclude,
@@ -7928,6 +7937,7 @@ async function _clone({
       ref,
       remote,
       corsProxy,
+      filter,
       depth,
       since,
       exclude,
@@ -8019,6 +8029,7 @@ async function clone({
   corsProxy = undefined,
   ref = undefined,
   remote = 'origin',
+  filter = undefined,
   depth = undefined,
   since = undefined,
   exclude = [],
@@ -8053,6 +8064,7 @@ async function clone({
       corsProxy,
       ref,
       remote,
+      filter,
       depth,
       since,
       exclude,
@@ -9554,6 +9566,7 @@ async function fetch({
   remoteRef,
   url,
   corsProxy,
+  filter = null,
   depth = null,
   since = null,
   exclude = [],
@@ -9585,6 +9598,7 @@ async function fetch({
       remoteRef,
       url,
       corsProxy,
+      filter,
       depth,
       since,
       exclude,

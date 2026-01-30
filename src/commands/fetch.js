@@ -78,6 +78,7 @@ export async function _fetch({
   remote: _remote,
   url: _url,
   corsProxy,
+  filter = null,
   depth = null,
   since = null,
   exclude = [],
@@ -132,6 +133,9 @@ export async function _fetch({
     }
   }
   // Check that the remote supports the requested features
+  if (filter !== null && !remoteHTTP.capabilities.has('filter')) {
+    throw new RemoteCapabilityError('filter', 'filter')
+  }
   if (depth !== null && !remoteHTTP.capabilities.has('shallow')) {
     throw new RemoteCapabilityError('shallow', 'depth')
   }
@@ -207,6 +211,7 @@ export async function _fetch({
     wants,
     haves,
     shallows,
+    filter,
     depth,
     since,
     exclude,
