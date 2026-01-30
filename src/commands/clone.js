@@ -50,6 +50,7 @@ export async function _clone({
   corsProxy,
   ref,
   remote,
+  filter,
   depth,
   since,
   exclude,
