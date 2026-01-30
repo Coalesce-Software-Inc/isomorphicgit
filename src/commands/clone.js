@@ -26,6 +26,7 @@ import { GitConfigManager } from '../managers/GitConfigManager.js'
  * @param {boolean} args.noCheckout
  * @param {boolean} args.noTags
  * @param {string} args.remote
+ * @param {string} args.filter
  * @param {number} args.depth
  * @param {Date} args.since
  * @param {string[]} args.exclude

@@ -26,6 +26,7 @@ import { join } from '../utils/join.js'
  * @param {boolean} [args.noCheckout = false] - If true, clone will only fetch the repo, not check out a branch. Skipping checkout can save a lot of time normally spent writing files to disk.
  * @param {boolean} [args.noTags = false] - By default clone will fetch all tags. `noTags` disables that behavior.
  * @param {string} [args.remote = 'origin'] - What to name the remote that is created.
+ * @param {string} [args.filter]
  * @param {number} [args.depth] - Integer. Determines how much of the git repository's history to retrieve
  * @param {Date} [args.since] - Only fetch commits created after the given date. Mutually exclusive with `depth`.
  * @param {string[]} [args.exclude = []] - A list of branches or tags. Instructs the remote server not to send us any commits reachable from these refs.

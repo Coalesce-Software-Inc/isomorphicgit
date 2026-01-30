@@ -52,6 +52,7 @@ import { writeUploadPackRequest } from '../wire/writeUploadPackRequest.js'
  * @param {string} [args.remote]
  * @param {boolean} [args.singleBranch = false]
  * @param {boolean} [args.tags = false]
+ * @param {string} [args.filter]
  * @param {number} [args.depth]
  * @param {Date} [args.since]
  * @param {string[]} [args.exclude = []]

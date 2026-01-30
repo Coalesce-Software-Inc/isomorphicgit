@@ -1024,6 +1024,7 @@ export function checkout({ fs, onProgress, dir, gitdir, remote, ref: _ref, filep
  * @param {boolean} [args.noCheckout = false] - If true, clone will only fetch the repo, not check out a branch. Skipping checkout can save a lot of time normally spent writing files to disk.
  * @param {boolean} [args.noTags = false] - By default clone will fetch all tags. `noTags` disables that behavior.
  * @param {string} [args.remote = 'origin'] - What to name the remote that is created.
+ * @param {string} [args.filter]
  * @param {number} [args.depth] - Integer. Determines how much of the git repository's history to retrieve
  * @param {Date} [args.since] - Only fetch commits created after the given date. Mutually exclusive with `depth`.
  * @param {string[]} [args.exclude = []] - A list of branches or tags. Instructs the remote server not to send us any commits reachable from these refs.
@@ -1063,6 +1064,7 @@ export function clone({ fs, http, onProgress, onMessage, onAuth, onAuthSuccess, 
     noCheckout?: boolean;
     noTags?: boolean;
     remote?: string;
+    filter?: string;
     depth?: number;
     since?: Date;
     exclude?: string[];
@@ -1390,6 +1392,7 @@ export function fastForward({ fs, http, onProgress, onMessage, onAuth, onAuthSuc
  * @param {string} [args.ref] - Which branch to fetch if `singleBranch` is true. By default this is the current branch or the remote's default branch.
  * @param {string} [args.remoteRef] - The name of the branch on the remote to fetch if `singleBranch` is true. By default this is the configured remote tracking branch.
  * @param {boolean} [args.tags = false] - Also fetch tags
+ * @param {string} [args.filter]
  * @param {number} [args.depth] - Integer. Determines how much of the git repository's history to retrieve
  * @param {boolean} [args.relative = false] - Changes the meaning of `depth` to be measured from the current shallow depth rather than from the branch tip.
  * @param {Date} [args.since] - Only fetch commits created after the given date. Mutually exclusive with `depth`.
@@ -1434,6 +1437,7 @@ export function fetch({ fs, http, onProgress, onMessage, onAuth, onAuthSuccess, 
     ref?: string;
     remoteRef?: string;
     tags?: boolean;
+    filter?: string;
     depth?: number;
     relative?: boolean;
     since?: Date;

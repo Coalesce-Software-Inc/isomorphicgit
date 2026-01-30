@@ -7478,6 +7478,7 @@ function writeUploadPackRequest({
  * @param {string} [args.remote]
  * @param {boolean} [args.singleBranch = false]
  * @param {boolean} [args.tags = false]
+ * @param {string} [args.filter]
  * @param {number} [args.depth]
  * @param {Date} [args.since]
  * @param {string[]} [args.exclude = []]
@@ -7877,6 +7878,7 @@ async function _init({
  * @param {boolean} args.noCheckout
  * @param {boolean} args.noTags
  * @param {string} args.remote
+ * @param {string} args.filter
  * @param {number} args.depth
  * @param {Date} args.since
  * @param {string[]} args.exclude
@@ -7901,6 +7903,7 @@ async function _clone({
   corsProxy,
   ref,
   remote,
+  filter,
   depth,
   since,
   exclude,
@@ -7987,6 +7990,7 @@ async function _clone({
  * @param {boolean} [args.noCheckout = false] - If true, clone will only fetch the repo, not check out a branch. Skipping checkout can save a lot of time normally spent writing files to disk.
  * @param {boolean} [args.noTags = false] - By default clone will fetch all tags. `noTags` disables that behavior.
  * @param {string} [args.remote = 'origin'] - What to name the remote that is created.
+ * @param {string} [args.filter]
  * @param {number} [args.depth] - Integer. Determines how much of the git repository's history to retrieve
  * @param {Date} [args.since] - Only fetch commits created after the given date. Mutually exclusive with `depth`.
  * @param {string[]} [args.exclude = []] - A list of branches or tags. Instructs the remote server not to send us any commits reachable from these refs.
@@ -9517,6 +9521,7 @@ async function fastForward({
  * @param {string} [args.ref] - Which branch to fetch if `singleBranch` is true. By default this is the current branch or the remote's default branch.
  * @param {string} [args.remoteRef] - The name of the branch on the remote to fetch if `singleBranch` is true. By default this is the configured remote tracking branch.
  * @param {boolean} [args.tags = false] - Also fetch tags
+ * @param {string} [args.filter]
  * @param {number} [args.depth] - Integer. Determines how much of the git repository's history to retrieve
  * @param {boolean} [args.relative = false] - Changes the meaning of `depth` to be measured from the current shallow depth rather than from the branch tip.
  * @param {Date} [args.since] - Only fetch commits created after the given date. Mutually exclusive with `depth`.
