@@ -7608,6 +7608,7 @@ async function _fetch({
       `agent=${pkg.agent}`,
     ]
   );
+  if (filter) capabilities.push('filter');
   if (relative) capabilities.push('deepen-relative');
   // Start figuring out which oids from the remote we want to request
   const wants = singleBranch ? [oid] : remoteRefs.values();
