@@ -1392,6 +1392,7 @@ export function fastForward({ fs, http, onProgress, onMessage, onAuth, onAuthSuc
  * @param {string} [args.ref] - Which branch to fetch if `singleBranch` is true. By default this is the current branch or the remote's default branch.
  * @param {string} [args.remoteRef] - The name of the branch on the remote to fetch if `singleBranch` is true. By default this is the configured remote tracking branch.
  * @param {boolean} [args.tags = false] - Also fetch tags
+ * @param {boolean} [args.unshallow = false]
  * @param {string} [args.filter]
  * @param {number} [args.depth] - Integer. Determines how much of the git repository's history to retrieve
  * @param {boolean} [args.relative = false] - Changes the meaning of `depth` to be measured from the current shallow depth rather than from the branch tip.
@@ -1421,7 +1422,7 @@ export function fastForward({ fs, http, onProgress, onMessage, onAuth, onAuthSuc
  * console.log(result)
  *
  */
-export function fetch({ fs, http, onProgress, onMessage, onAuth, onAuthSuccess, onAuthFailure, dir, gitdir, ref, remote, remoteRef, url, corsProxy, filter, depth, since, exclude, relative, tags, singleBranch, headers, prune, pruneTags, cache, }: {
+export function fetch({ fs, http, onProgress, onMessage, onAuth, onAuthSuccess, onAuthFailure, dir, gitdir, ref, remote, remoteRef, url, corsProxy, unshallow, filter, depth, since, exclude, relative, tags, singleBranch, headers, prune, pruneTags, cache, }: {
     fs: CallbackFsClient | PromiseFsClient;
     http: HttpClient;
     onProgress?: ProgressCallback;
@@ -1437,6 +1438,7 @@ export function fetch({ fs, http, onProgress, onMessage, onAuth, onAuthSuccess, 
     ref?: string;
     remoteRef?: string;
     tags?: boolean;
+    unshallow?: boolean;
     filter?: string;
     depth?: number;
     relative?: boolean;

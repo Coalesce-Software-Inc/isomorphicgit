@@ -5944,6 +5944,7 @@ function writeUploadPackRequest({
   wants = [],
   haves = [],
   shallows = [],
+  unshallow = false,
   filter = null,
   depth = null,
   since = null,
@@ -5957,7 +5958,11 @@ function writeUploadPackRequest({
     firstLineCapabilities = '';
   }
   for (const oid of shallows) {
-    packstream.push(GitPktLine.encode(`shallow ${oid}\n`));
+    if (unshallow) {
+      packstream.push(GitPktLine.encode(`unshallow ${oid}\n`));
+    } else {
+      packstream.push(GitPktLine.encode(`shallow ${oid}\n`));
+    }
   }
   if (filter !== null) {
     packstream.push(GitPktLine.encode(`filter ${filter}\n`));

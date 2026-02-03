@@ -52,6 +52,7 @@ import { writeUploadPackRequest } from '../wire/writeUploadPackRequest.js'
  * @param {string} [args.remote]
  * @param {boolean} [args.singleBranch = false]
  * @param {boolean} [args.tags = false]
+ * @param {boolean} [args.unshallow = false]
  * @param {string} [args.filter]
  * @param {number} [args.depth]
  * @param {Date} [args.since]
@@ -79,6 +80,7 @@ export async function _fetch({
   remote: _remote,
   url: _url,
   corsProxy,
+  unshallow = false,
   filter = null,
   depth = null,
   since = null,
@@ -213,6 +215,7 @@ export async function _fetch({
     wants,
     haves,
     shallows,
+    unshallow,
     filter,
     depth,
     since,
