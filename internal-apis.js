@@ -2876,6 +2876,8 @@ async function readObjectPacked({
     });
     if (p.error) throw new InternalError(p.error)
     // If the packfile DOES have the oid we're looking for...
+    console.log('[Git] readObjectPacked oid: ', oid);
+    console.log('[Git] readObjectPacked has oid: ', p.offsets.has(oid));
     console.log('[Git] readObjectPacked p.offsets: ', p.offsets);
     if (p.offsets.has(oid)) {
       // Get the resolved git object from the packfile
@@ -2936,7 +2938,7 @@ async function _readObject({
   }
   // Finally
   if (!result) {
-    return result;
+    return { object: null };
   }
 
   if (format === 'deflated') {
