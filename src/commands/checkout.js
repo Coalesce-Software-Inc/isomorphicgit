@@ -292,7 +292,13 @@ export async function _checkout({
           if (chmod) {
             deletes.push(filepath);
           }
+          console.log('[Git] checkout GitIndexManager.acquire write file: ', filepath)
           const { object } = await readObject({ fs, cache, gitdir, oid });
+          if (!object) {
+            console.log('[Git] checkout GitIndexManager.acquire object not found: ', oid)
+            continue;
+          }
+          console.log('[Git] checkout GitIndexManager.acquire got object')
           const write = [filepath, object];
           if (mode === 0o100644) {
             regularWrites.push(write)
@@ -307,7 +313,8 @@ export async function _checkout({
             )
           }
         }
-  
+
+        console.log('[Git] checkout GitIndexManager.acquire rmMany')
         await fs.rmMany(deletes);
         if (onProgress) {
           await onProgress({ loaded: 0, total: 0, phase: "deleted files for chmod reasons"})

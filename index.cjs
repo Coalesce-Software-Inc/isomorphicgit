@@ -2892,6 +2892,7 @@ async function readObjectPacked({
   list = list.filter(x => x.endsWith('.idx'));
   for (const filename of list) {
     const indexFile = `${gitdir}/objects/pack/${filename}`;
+    console.log('[Git] readObjectPacked read index: ', indexFile);
     const p = await readPackIndex({
       fs,
       cache,
@@ -2900,12 +2901,14 @@ async function readObjectPacked({
     });
     if (p.error) throw new InternalError(p.error)
     // If the packfile DOES have the oid we're looking for...
+    console.log('[Git] readObjectPacked p.offsets: ', p.offsets);
     if (p.offsets.has(oid)) {
       // Get the resolved git object from the packfile
       if (!p.pack) {
         const packFile = indexFile.replace(/idx$/, 'pack');
         p.pack = fs.read(packFile);
       }
+      console.log('[Git] readObjectPacked p.read');
       const result = await p.read({ oid, getExternalRefDelta });
       result.format = 'content';
       result.source = `objects/pack/${filename.replace(/idx$/, 'pack')}`;
@@ -2958,7 +2961,7 @@ async function _readObject({
   }
   // Finally
   if (!result) {
-    throw new NotFoundError(oid)
+    return result;
   }
 
   if (format === 'deflated') {
@@ -5898,7 +5901,13 @@ async function _checkout({
           if (chmod) {
             deletes.push(filepath);
           }
+          console.log('[Git] checkout GitIndexManager.acquire write file: ', filepath);
           const { object } = await _readObject({ fs, cache, gitdir, oid });
+          if (!object) {
+            console.log('[Git] checkout GitIndexManager.acquire object not found: ', oid);
+            continue;
+          }
+          console.log('[Git] checkout GitIndexManager.acquire got object');
           const write = [filepath, object];
           if (mode === 0o100644) {
             regularWrites.push(write);
@@ -5913,7 +5922,8 @@ async function _checkout({
             )
           }
         }
-  
+
+        console.log('[Git] checkout GitIndexManager.acquire rmMany');
         await fs.rmMany(deletes);
         if (onProgress) {
           await onProgress({ loaded: 0, total: 0, phase: "deleted files for chmod reasons"});

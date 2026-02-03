@@ -16,6 +16,7 @@ export async function readObjectPacked({
   list = list.filter(x => x.endsWith('.idx'))
   for (const filename of list) {
     const indexFile = `${gitdir}/objects/pack/${filename}`
+    console.log('[Git] readObjectPacked read index: ', indexFile)
     const p = await readPackIndex({
       fs,
       cache,
@@ -24,12 +25,14 @@ export async function readObjectPacked({
     })
     if (p.error) throw new InternalError(p.error)
     // If the packfile DOES have the oid we're looking for...
+    console.log('[Git] readObjectPacked p.offsets: ', p.offsets)
     if (p.offsets.has(oid)) {
       // Get the resolved git object from the packfile
       if (!p.pack) {
         const packFile = indexFile.replace(/idx$/, 'pack')
         p.pack = fs.read(packFile)
       }
+      console.log('[Git] readObjectPacked p.read')
       const result = await p.read({ oid, getExternalRefDelta })
       result.format = 'content'
       result.source = `objects/pack/${filename.replace(/idx$/, 'pack')}`

@@ -48,7 +48,7 @@ export async function _readObject({
   }
   // Finally
   if (!result) {
-    throw new NotFoundError(oid)
+    return result;
   }
 
   if (format === 'deflated') {
