@@ -20,7 +20,7 @@ export function writeUploadPackRequest({
   }
   for (const oid of shallows) {
     if (unshallow) {
-      packstream.push(GitPktLine.encode(`unshallow ${oid}\n`))
+      packstream.push(GitPktLine.encode(`want ${oid}\n`))
     } else {
       packstream.push(GitPktLine.encode(`shallow ${oid}\n`))
     }
