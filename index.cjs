@@ -7663,12 +7663,16 @@ async function _fetch({
     body: [packbuffer],
     headers,
   });
+  console.log('[Git] await parseUploadPackResponse');
   const response = await parseUploadPackResponse(raw.body);
   if (raw.headers) {
+    console.log('[Git] use raw.headers');
     response.headers = raw.headers;
   }
   // Apply all the 'shallow' and 'unshallow' commands
+  console.log('[Git] for response.shallows');
   for (const oid of response.shallows) {
+    console.log('[Git] for shallow');
     if (!oids.has(oid)) {
       // this is in a try/catch mostly because my old test fixtures are missing objects
       try {
@@ -7690,12 +7694,16 @@ async function _fetch({
       }
     }
   }
+  console.log('[Git] response.unshallows');
   for (const oid of response.unshallows) {
+    console.log('[Git] for unshallow');
     oids.delete(oid);
   }
+  console.log('[Git] GitShallowManager.write');
   await GitShallowManager.write({ fs, gitdir, oids });
   // Update local remote refs
   if (singleBranch) {
+    console.log('[Git] singleBranch');
     const refs = new Map([[fullref, oid]]);
     // But wait, maybe it was a symref, like 'HEAD'!
     // We need to save all the refs in the symref chain (sigh).
@@ -7714,6 +7722,7 @@ async function _fetch({
     if (realRef) {
       refs.set(key, realRef);
     }
+    console.log('[Git] GitRefManager.updateRemoteRefs');
     const { pruned } = await GitRefManager.updateRemoteRefs({
       fs,
       gitdir,
@@ -7727,6 +7736,7 @@ async function _fetch({
       response.pruned = pruned;
     }
   } else {
+    console.log('[Git] !singleBranch');
     const { pruned } = await GitRefManager.updateRemoteRefs({
       fs,
       gitdir,
@@ -7743,22 +7753,27 @@ async function _fetch({
   }
   // We need this value later for the `clone` command.
   response.HEAD = remoteHTTP.symrefs.get('HEAD');
+  console.log('[Git] response.HEAD: ', response.HEAD);
   // AWS CodeCommit doesn't list HEAD as a symref, but we can reverse engineer it
   // Find the SHA of the branch called HEAD
   if (response.HEAD === undefined) {
+    console.log('[Git] response.HEAD === undefined');
     const { oid } = GitRefManager.resolveAgainstMap({
       ref: 'HEAD',
       map: remoteRefs,
     });
     // Use the name of the first branch that's not called HEAD that has
     // the same SHA as the branch called HEAD.
+    console.log('[Git] for remoteRefs.entries');
     for (const [key, value] of remoteRefs.entries()) {
+      console.log('[Git] for remoteRefs.entry: ', key, value);
       if (key !== 'HEAD' && value === oid) {
         response.HEAD = key;
         break
       }
     }
   }
+  console.log('[Git] fullref: ', fullref);
   const noun = fullref.startsWith('refs/tags') ? 'tag' : 'branch';
   response.FETCH_HEAD = {
     oid,
@@ -7766,6 +7781,7 @@ async function _fetch({
   };
 
   if (onProgress || onMessage) {
+    console.log('[Git] onProgress || onMessage');
     const lines = splitLines(response.progress);
     forAwait(lines, async line => {
       if (onMessage) await onMessage(line);
@@ -7781,17 +7797,23 @@ async function _fetch({
       }
     });
   }
+  console.log('[Git] collect(response.packfile)');
   const packfile = Buffer.from(await collect(response.packfile));
+  console.log('[Git] packfile.slice');
   const packfileSha = packfile.slice(-20).toString('hex');
+  console.log('[Git] HEAD: ', response.HEAD);
+  console.log('[Git] FETCH_HEAD: ', response.FETCH_HEAD);
   const res = {
     defaultBranch: response.HEAD,
     fetchHead: response.FETCH_HEAD.oid,
     fetchHeadDescription: response.FETCH_HEAD.description,
   };
   if (response.headers) {
+    console.log('[Git] headers: ', response.headers);
     res.headers = response.headers;
   }
   if (prune) {
+    console.log('[Git] prune');
     res.pruned = response.pruned;
   }
   // This is a quick fix for the empty .git/objects/pack/pack-.pack file error,
@@ -7800,7 +7822,10 @@ async function _fetch({
   // a) NOT concatenate the entire packfile into memory (line 78),
   // b) compute the SHA of the stream except for the last 20 bytes, using the same library used in push.js, and
   // c) compare the computed SHA with the last 20 bytes of the stream before saving to disk, and throwing a "packfile got corrupted during download" error if the SHA doesn't match.
+  console.log('[Git] packfileSha: ', packfileSha);
+  console.log('[Git] packfile empty: ', emptyPackfile(packfile));
   if (packfileSha !== '' && !emptyPackfile(packfile)) {
+    console.log('[Git] packfile not empty');
     res.packfile = `objects/pack/pack-${packfileSha}.pack`;
     const fullpath = join(gitdir, res.packfile);
     await fs.write(fullpath, packfile);
@@ -7810,8 +7835,10 @@ async function _fetch({
       getExternalRefDelta,
       onProgress,
     });
+    console.log('[Git] write to fs');
     await fs.write(fullpath.replace(/\.pack$/, '.idx'), await idx.toBuffer());
   }
+  console.log('[Git] return result');
   return res
 }
 
