@@ -5659,13 +5659,6 @@ const worthWalking = (filepath, root) => {
   }
 };
 
-/**
- * @param {number} startMs
- */
-const getElapsedSeconds = (startMs) => {
-  return +((performance.now() - startMs) / 1000).toFixed(3);
-}
-
 // @ts-check
 
 /**
@@ -5684,7 +5677,7 @@ const getElapsedSeconds = (startMs) => {
  * @param {boolean} [args.force]
  * @param {boolean} [args.track]
  *
- * @returns {Promise<object>} Resolves successfully when filesystem operations are complete, returning a dictionary composed of performance marks in seconds
+ * @returns {Promise<void>} Resolves successfully when filesystem operations are complete
  *
  */
 async function _checkout({
@@ -5702,29 +5695,16 @@ async function _checkout({
   force,
   track = true,
 }) {
-  const startTotal = performance.now();
-  const perfSegments = {
-    analyze: 0,
-    conflicts: 0,
-    createDirectories: 0,
-    deleteDirectories: 0,
-    deleteFiles: 0,
-    errors: 0,
-    resolveRemote: 0,
-    updateHead: 0,
-    writes: 0,
-    total: 0,
-  };
-
   // Get tree oid
-  const startResolveRemote = performance.now();
-
   let oid;
   try {
+    console.log('[Git] checkout GitRefManager.resolve');
     oid = await GitRefManager.resolve({ fs, gitdir, ref });
     // TODO: Figure out what to do if both 'ref' and 'remote' are specified, ref already exists,
     // and is configured to track a different remote.
   } catch (err) {
+    console.log('[Git] checkout ref: ', ref);
+    console.log('[Git] checkout remote: ', remote);
     if (ref === 'HEAD') throw err
     // If `ref` doesn't exist, create a new remote tracking branch
     // Figure out the commit to checkout
@@ -5734,6 +5714,7 @@ async function _checkout({
       gitdir,
       ref: remoteRef,
     });
+    console.log('[Git] checkout track', track);
     if (track) {
       // Set up remote tracking branch
       const config = await GitConfigManager.get({ fs, gitdir });
@@ -5742,6 +5723,7 @@ async function _checkout({
       await GitConfigManager.save({ fs, gitdir, config });
     }
     // Create a new branch that points at that same commit
+    console.log('[Git] checkout writeRef');
     await GitRefManager.writeRef({
       fs,
       gitdir,
@@ -5749,18 +5731,17 @@ async function _checkout({
       value: oid,
     });
   }
-  perfSegments.resolveRemote = getElapsedSeconds(startResolveRemote);
 
   // Update working dir
+  console.log('[Git] checkout noCheckout: ', noCheckout);
   if (!noCheckout) {
-    const startAnalyze = performance.now();
-
     let ops;
     // First pass - just analyze files (not directories) and figure out what needs to be done
     try {
       if(onProgress) {
         await onProgress({ total: 0, phase: "pre-analyze", loaded: 0});
       }
+      console.log('[Git] checkout analyze');
       ops = await analyze({
         fs,
         cache,
@@ -5772,6 +5753,7 @@ async function _checkout({
         filepaths,
       });
     } catch (err) {
+      console.log('[Git] checkout analyze failed: ', err);
       // Throw a more helpful error message for this common mistake.
       if (err instanceof NotFoundError && err.data.what === oid) {
         throw new CommitNotFetchedError(ref, oid)
@@ -5782,37 +5764,31 @@ async function _checkout({
     if(onProgress) {
       await onProgress({ total: 0, phase: "post-analyze", loaded: 0});
     }
-    perfSegments.analyze = getElapsedSeconds(startAnalyze);
   
     // Report conflicts
-    const startConflicts = performance.now();
-
+    console.log('[Git] checkout onConflicts');
     const conflicts = ops
       .filter(([method]) => method === 'conflict')
       .map(([method, fullpath]) => fullpath);
-    perfSegments.conflicts = getElapsedSeconds(startConflicts);
-
     if (conflicts.length > 0) {
+      console.log('[Git] checkout has conflicts');
       throw new CheckoutConflictError(conflicts)
     }
 
     // Collect errors
-    const startErrors = performance.now();
-
     const errors = ops
       .filter(([method]) => method === 'error')
       .map(([method, fullpath]) => fullpath);
-    perfSegments.errors = getElapsedSeconds(startErrors);
-
     if (errors.length > 0) {
+      console.log('[Git] checkout has errors');
       throw new InternalError(errors.join(', '))
     }
 
+    console.log('[Git] checkout dryRun: ', dryRun);
     if (dryRun) {
       // Since the format of 'ops' is in flux, I really would rather folk besides myself not start relying on it
       // return ops
-      perfSegments.total = getElapsedSeconds(startTotal);
-      return perfSegments;
+      return
     }
 
     // Second pass - execute planned changes
@@ -5822,8 +5798,7 @@ async function _checkout({
     let count = 0;
     const total = ops.length;
     //if we're going to do a majority of just pure file writes/updates, then lets read
-    const startDeleteFiles = performance.now();
-
+    console.log('[Git] checkout GitIndexManager.acquire rm file');
     await GitIndexManager.acquire({ fs, gitdir, cache }, async function(index) {
       //delete many only when fs has correct extra method
       if (fs._unlinkMany) {
@@ -5837,7 +5812,8 @@ async function _checkout({
           )
           .map(async function([method, fullpath]) {
             if (!fs._unlinkMany && method === 'delete') {	
-              const filepath = `${dir}/${fullpath}`;	
+              const filepath = `${dir}/${fullpath}`;
+              console.log('[Git] checkout rm file: ', filepath);
               await fs.rm(filepath);	
             }
             index.delete({ filepath: fullpath });
@@ -5851,11 +5827,9 @@ async function _checkout({
           })
       );
     });
-    perfSegments.deleteFiles = getElapsedSeconds(startDeleteFiles);
 
     // Note: this is cannot be done naively in parallel
-    const startDeleteDirectories = performance.now();
-
+    console.log('[Git] checkout GitIndexManager.acquire rm dir');
     await GitIndexManager.acquire({ fs, gitdir, cache }, async function(index) {
       for (const [method, fullpath] of ops) {
         if (method === 'rmdir' || method === 'rmdir-index') {
@@ -5864,6 +5838,7 @@ async function _checkout({
             if (method === 'rmdir-index') {
               index.delete({ filepath: fullpath });
             }
+            console.log('[Git] checkout rmdir: ', filepath);
             await fs.rmdir(filepath);
             if (onProgress) {
               await onProgress({
@@ -5884,15 +5859,14 @@ async function _checkout({
         }
       }
     });
-    perfSegments.deleteDirectories = getElapsedSeconds(startDeleteDirectories);
 
-    const startCreateDirectories = performance.now();
-
+    console.log('[Git] checkout mkdirs');
     await Promise.all(
       ops
         .filter(([method]) => method === 'mkdir' || method === 'mkdir-index')
         .map(async function([_, fullpath]) {
           const filepath = `${dir}/${fullpath}`;
+          console.log('[Git] checkout mkdir: ', filepath);
           await fs.mkdir(filepath);
           if (onProgress) {
             await onProgress({
@@ -5903,10 +5877,8 @@ async function _checkout({
           }
         })
     );
-    perfSegments.createDirectories = getElapsedSeconds(startCreateDirectories);
 
-    const startWrites = performance.now();
-
+    console.log('[Git] checkout GitIndexManager.acquire write files');
     await GitIndexManager.acquire({ fs, gitdir, cache }, async function(index) {
       //only execute this enhanced performance methodology if our fs has the required internal functions, otherwise run the standard path
       if (fs._writeFiles && fs._unlinkMany) {
@@ -5929,6 +5901,7 @@ async function _checkout({
           } else if (mode === 0o120000) {
             symlinkWrites.push(write);
           } else {
+            console.log('[Git] checkout invalid mode');
             throw new InternalError(
               `Invalid mode 0o${mode.toString(8)} detected in blob ${oid}`
             )
@@ -5939,7 +5912,8 @@ async function _checkout({
         if (onProgress) {
           await onProgress({ loaded: 0, total: 0, phase: "deleted files for chmod reasons"});
         }
-  
+
+        console.log('[Git] checkout fs.writeFiles');
         await fs.writeFiles(regularWrites, {});
         if (onProgress) {
           await onProgress({ loaded: 0, total: regularWrites.length, phase: "wrote regular files"});
@@ -5955,6 +5929,7 @@ async function _checkout({
 
       }
 
+      console.log('[Git] checkout Promise.all write files');
       await Promise.all(
         ops
           .filter(
@@ -5977,6 +5952,7 @@ async function _checkout({
                 }
                 if (mode === 0o100644) {
                   // regular file
+                  console.log('[Git] checkout fs.write file');
                   await fs.write(filepath, object);
                 } else if (mode === 0o100755) {
                   // executable file
@@ -5985,6 +5961,7 @@ async function _checkout({
                   // symlink
                   await fs.writelink(filepath, object);
                 } else {
+                  console.log('[Git] checkout invalid mode');
                   throw new InternalError(
                     `Invalid mode 0o${mode.toString(8)} detected in blob ${oid}`
                   )
@@ -6015,19 +5992,19 @@ async function _checkout({
                 });
               }
             } catch (e) {
+              console.log('[Git] checkout error', e);
               console.log(e);
             }
           })
       );
     });
-    perfSegments.writes = getElapsedSeconds(startWrites);
   }
 
   // Update HEAD
+  console.log('[Git] checkout noUpdatedHead: ', noUpdatedHead);
   if (!noUpdateHead) {
-    const startUpdateHead = performance.now();
-
     const fullRef = await GitRefManager.expand({ fs, gitdir, ref });
+    console.log('[Git] checkout fullRef: ', fullRef);
     if (fullRef.startsWith('refs/heads')) {
       await GitRefManager.writeSymbolicRef({
         fs,
@@ -6039,11 +6016,7 @@ async function _checkout({
       // detached head
       await GitRefManager.writeRef({ fs, gitdir, ref: 'HEAD', value: oid });
     }
-    perfSegments.updateHead = getElapsedSeconds(startUpdateHead);
   }
-
-  perfSegments.total = getElapsedSeconds(startTotal);
-  return perfSegments;
 }
 
 async function readAllFiles({
@@ -7688,7 +7661,7 @@ async function _fetch({
       }
     }
   }
-  console.log('[Git] response.unshallows');
+  console.log('[Git] for response.unshallows');
   for (const oid of response.unshallows) {
     console.log('[Git] for unshallow');
     oids.delete(oid);
@@ -7803,7 +7776,6 @@ async function _fetch({
     fetchHeadDescription: response.FETCH_HEAD.description,
   };
   if (response.headers) {
-    console.log('[Git] headers: ', response.headers);
     res.headers = response.headers;
   }
   if (prune) {
@@ -7949,6 +7921,7 @@ async function _clone({
       await config.set(`http.corsProxy`, corsProxy);
       await GitConfigManager.save({ fs, gitdir, config });
     }
+    console.log('[Git] clone fetch');
     const { defaultBranch, fetchHead } = await _fetch({
       fs,
       cache,
@@ -7971,10 +7944,13 @@ async function _clone({
       headers,
       tags: !noTags,
     });
+    console.log('[Git] clone fetchHead: ', fetchHead);
     if (fetchHead === null) return
     ref = ref || defaultBranch;
     ref = ref.replace('refs/heads/', '');
+    console.log('[Git] clone ref: ', ref);
     // Checkout that branch
+    console.log('[Git] clone checkout');
     await _checkout({
       fs,
       cache,
@@ -7985,7 +7961,9 @@ async function _clone({
       remote,
       noCheckout,
     });
+    console.log('[Git] clone checkout complete');
   } catch (err) {
+    console.log('[Git] clone checkout error: ', err);
     // Remove partial local repository, see #1283
     // Ignore any error as we are already failing.
     // The catch is necessary so the original error is not masked.
@@ -8631,7 +8609,6 @@ async function _findMergeBase({ fs, cache, gitdir, oids }) {
       return [...result]
     }
     // We haven't found a common ancestor yet
-    //grab the parent commits, and confirm if we've visted them before, if not, then queue them up for the next walker round
     const newheads = new Map();
     for (const { oid, index } of heads) {
       try {
@@ -8651,9 +8628,6 @@ async function _findMergeBase({ fs, cache, gitdir, oids }) {
   }
   return []
 }
-
-//Reference to the oid of the 'null' or 'empty' tree
-const EMPTY_TREE_OID = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 const LINEBREAKS = /^.*(\r?\n|$)/gm;
 
@@ -9031,12 +9005,7 @@ async function mergeBlobs({
         fullpath = base._fullpath;
       }catch(error) {
         //get the path
-        if (ours && ours._fullpath) {
-          fullpath = ours._fullpath;
-        } else {
-          fullpath = theirs._fullpath;
-
-        }
+        fullpath = ours?._fullpath || theirs._fullpath;
       }
       awaitedMergedText = await asyncMergeConflictCallback(mergedText, fullpath, { content: ourContentWithoutLineBreaks, branch: ourName }, { content: theirContentWithoutLineBreaks, branch: theirName }, diffResult);
       //the user deleted all the text, we remove the file
@@ -9056,85 +9025,12 @@ async function mergeBlobs({
     object: Buffer.from(awaitedMergedText, 'utf8'),
     dryRun,
   });
-  let mode = ourMode;
-  if (!mode) {
-    mode = theirMode;
-  }
-  return { mode, path, oid, type }
-}
-
-/**
- * @param {object} args
- * @param {import('../models/FileSystem.js').FileSystem} args.fs
- * @param {any} args.cache
- * @param {string} args.gitdir
- * @param {string[]} args.oids
- * @param {number} args.depth
- * @param {number} args.maxDepth
- * @param {Object} args.author
- * @param {string} args.author.name
- * @param {string} args.author.email
- * @param {number} args.author.timestamp
- * @param {number} args.author.timezoneOffset
- * @param {Object} args.committer
- * @param {string} args.committer.name
- * @param {string} args.committer.email
- * @param {number} args.committer.timestamp
- * @param {number} args.committer.timezoneOffset
- * @param {string} [args.signingKey]
- * @param {SignCallback} [args.onSign] - a PGP signing implementation
- *
- */
-async function resolveVirtualMergeBase({fs, cache, gitdir, oids, depth, maxDepth, author, committer, signingKey, onSign }) {
-    // During a merge, it's possible for two branches (commits) to have more than one merge base
-    // in order to support merging them as git merge -s ort does, we will follow the same pattern as in that algorithm
-    // When 2 common ancestors were identified by findMergeBase, we find their merge base and attempt to merge them together to create a stable base
-    // When > 2 common ancestors, we must create a virtual tree by recursively to smush all the commits into one base object to proceed with the merge
-    
-    //if we've recursed the maximum amount of times or receive bad input, bail out
-    if (depth > maxDepth || oids.length < 2) {
-        throw new MergeNotSupportedError()
-    } else if (oids.length === 2) {
-        const baseOids = await _findMergeBase({fs, cache, gitdir, oids});
-        if (baseOids.length < 1) {
-            return EMPTY_TREE_OID;
-        } else if (baseOids.length > 1) {
-            //I don't think this should support that many recursive calls before a short circuit occurs
-            //for perf reasons. I'd rather a customer just handle the merge off platform using real git.
-            return await resolveVirtualMergeBase({ fs, cache, gitdir, oids: baseOids, maxDepth, depth: depth + 1, author, committer, signingKey, onSign })
-        } else {
-            //when it's one, then we're allowed to merge the two bases and report back to the caller so they can
-            //continue with their merge
-            const baseOid = baseOids[0];
-            //if this throws bc of merge conflicts, we let it?
-            return await mergeTree({ fs, cache, gitdir, ourOid: oids[0], theirOid: oids[1], baseOid })
-            //do a merge of oids[0], oids[1] & baseOid, pass that sha back out
-
-        }
-    } else {
-        //when >2 we have some work to do :grimmace:
-        //virtual tree
-        const virtualTree = await resolveVirtualMergeBase({ fs, cache, gitdir, oids: [oids[0], oids[1]], depth: depth + 1, maxDepth, author, committer, onSign, signingKey });
-        const tempCommit = await _commit({
-            fs, 
-            cache, 
-            gitdir,
-            ref: oids[0],// use the 1st commit as 'our' ref for name purposes
-            message: "virtual merge base commit", 
-            tree: virtualTree, 
-            parent: [oids[0], oids[1]],
-            author,
-            committer,
-            onSign,
-            signingKey
-        });
-
-        return await resolveVirtualMergeBase({ fs, cache, gitdir, oids: [tempCommit, ...oids.slice(2)], depth: depth + 1, maxDepth, author, committer, onSign, signingKey })
-    }
+  return { mode:ourMode ?? theirMode, path, oid, type }
 }
 
 // @ts-check
 
+// import diff3 from 'node-diff3'
 /**
  *
  * @typedef {Object} MergeResult - Returns an object with a schema like this:
@@ -9222,21 +9118,10 @@ async function _merge({
     gitdir,
     oids: [ourOid, theirOid],
   });
-
-  let baseOid;
-  if (baseOids.length < 1) {
-    //in the event that there is no common commit ancestor for two branches in a repo (wild)
-    //use the empty tree reference
-    baseOid = EMPTY_TREE_OID;
-  } else if (baseOids.length > 1) {
-    // find the best option of the multiple ancestors
-    //allegedly real git would create a virtual tree by merging the oids together
-    //to form a virtual tree to use as the base for the 3way diff merge later on
-    baseOid = await resolveVirtualMergeBase({ fs, cache, gitdir, oids: baseOids, maxDepth: 5, depth: 0, author, committer, signingKey, onSign });
-  } else {
-    baseOid = baseOids[0];
+  if (baseOids.length !== 1) {
+    throw new MergeNotSupportedError()
   }
-  
+  const baseOid = baseOids[0];
   // handle fast-forward case
   if (baseOid === theirOid) {
     return {

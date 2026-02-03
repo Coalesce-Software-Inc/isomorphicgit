@@ -262,7 +262,7 @@ export async function _fetch({
       }
     }
   }
-  console.log('[Git] response.unshallows')
+  console.log('[Git] for response.unshallows')
   for (const oid of response.unshallows) {
     console.log('[Git] for unshallow')
     oids.delete(oid)
@@ -377,7 +377,6 @@ export async function _fetch({
     fetchHeadDescription: response.FETCH_HEAD.description,
   }
   if (response.headers) {
-    console.log('[Git] headers: ', response.headers)
     res.headers = response.headers
   }
   if (prune) {

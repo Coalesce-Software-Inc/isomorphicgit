@@ -77,10 +77,13 @@ export async function _checkout({
 
   let oid
   try {
+    console.log('[Git] checkout GitRefManager.resolve')
     oid = await GitRefManager.resolve({ fs, gitdir, ref })
     // TODO: Figure out what to do if both 'ref' and 'remote' are specified, ref already exists,
     // and is configured to track a different remote.
   } catch (err) {
+    console.log('[Git] checkout ref: ', ref)
+    console.log('[Git] checkout remote: ', remote)
     if (ref === 'HEAD') throw err
     // If `ref` doesn't exist, create a new remote tracking branch
     // Figure out the commit to checkout
@@ -90,6 +93,7 @@ export async function _checkout({
       gitdir,
       ref: remoteRef,
     })
+    console.log('[Git] checkout track', track)
     if (track) {
       // Set up remote tracking branch
       const config = await GitConfigManager.get({ fs, gitdir })
@@ -98,6 +102,7 @@ export async function _checkout({
       await GitConfigManager.save({ fs, gitdir, config })
     }
     // Create a new branch that points at that same commit
+    console.log('[Git] checkout writeRef')
     await GitRefManager.writeRef({
       fs,
       gitdir,
@@ -108,6 +113,7 @@ export async function _checkout({
   perfSegments.resolveRemote = getElapsedSeconds(startResolveRemote);
 
   // Update working dir
+  console.log('[Git] checkout noCheckout: ', noCheckout)
   if (!noCheckout) {
     const startAnalyze = performance.now();
 
@@ -117,6 +123,7 @@ export async function _checkout({
       if(onProgress) {
         await onProgress({ total: 0, phase: "pre-analyze", loaded: 0});
       }
+      console.log('[Git] checkout analyze')
       ops = await analyze({
         fs,
         cache,
@@ -128,6 +135,7 @@ export async function _checkout({
         filepaths,
       })
     } catch (err) {
+      console.log('[Git] checkout analyze failed: ', err)
       // Throw a more helpful error message for this common mistake.
       if (err instanceof NotFoundError && err.data.what === oid) {
         throw new CommitNotFetchedError(ref, oid)
@@ -149,6 +157,7 @@ export async function _checkout({
     perfSegments.conflicts = getElapsedSeconds(startConflicts);
 
     if (conflicts.length > 0) {
+      console.log('[Git] checkout has conflicts')
       throw new CheckoutConflictError(conflicts)
     }
 
@@ -161,9 +170,11 @@ export async function _checkout({
     perfSegments.errors = getElapsedSeconds(startErrors);
 
     if (errors.length > 0) {
+      console.log('[Git] checkout has errors')
       throw new InternalError(errors.join(', '))
     }
 
+    console.log('[Git] checkout dryRun: ', dryRun)
     if (dryRun) {
       // Since the format of 'ops' is in flux, I really would rather folk besides myself not start relying on it
       // return ops
@@ -193,7 +204,8 @@ export async function _checkout({
           )
           .map(async function([method, fullpath]) {
             if (!fs._unlinkMany && method === 'delete') {	
-              const filepath = `${dir}/${fullpath}`	
+              const filepath = `${dir}/${fullpath}`
+              console.log('[Git] checkout rm file: ', filepath)
               await fs.rm(filepath)	
             }
             index.delete({ filepath: fullpath })
@@ -220,6 +232,7 @@ export async function _checkout({
             if (method === 'rmdir-index') {
               index.delete({ filepath: fullpath })
             }
+            console.log('[Git] checkout rmdir: ', filepath)
             await fs.rmdir(filepath)
             if (onProgress) {
               await onProgress({
@@ -244,11 +257,13 @@ export async function _checkout({
 
     const startCreateDirectories = performance.now();
 
+    console.log('[Git] checkout mkdirs')
     await Promise.all(
       ops
         .filter(([method]) => method === 'mkdir' || method === 'mkdir-index')
         .map(async function([_, fullpath]) {
           const filepath = `${dir}/${fullpath}`
+          console.log('[Git] checkout mkdir: ', filepath)
           await fs.mkdir(filepath)
           if (onProgress) {
             await onProgress({
@@ -263,6 +278,7 @@ export async function _checkout({
 
     const startWrites = performance.now();
 
+    console.log('[Git] checkout GitIndexManager.acquire write files')
     await GitIndexManager.acquire({ fs, gitdir, cache }, async function(index) {
       //only execute this enhanced performance methodology if our fs has the required internal functions, otherwise run the standard path
       if (fs._writeFiles && fs._unlinkMany) {
@@ -285,6 +301,7 @@ export async function _checkout({
           } else if (mode === 0o120000) {
             symlinkWrites.push(write)
           } else {
+            console.log('[Git] checkout invalid mode')
             throw new InternalError(
               `Invalid mode 0o${mode.toString(8)} detected in blob ${oid}`
             )
@@ -295,7 +312,8 @@ export async function _checkout({
         if (onProgress) {
           await onProgress({ loaded: 0, total: 0, phase: "deleted files for chmod reasons"})
         }
-  
+
+        console.log('[Git] checkout fs.writeFiles')
         await fs.writeFiles(regularWrites, {});
         if (onProgress) {
           await onProgress({ loaded: 0, total: regularWrites.length, phase: "wrote regular files"})
@@ -311,6 +329,7 @@ export async function _checkout({
 
       }
 
+      console.log('[Git] checkout Promise.all write files')
       await Promise.all(
         ops
           .filter(
@@ -333,6 +352,7 @@ export async function _checkout({
                 }
                 if (mode === 0o100644) {
                   // regular file
+                  console.log('[Git] checkout fs.write file')
                   await fs.write(filepath, object)
                 } else if (mode === 0o100755) {
                   // executable file
@@ -341,6 +361,7 @@ export async function _checkout({
                   // symlink
                   await fs.writelink(filepath, object)
                 } else {
+                  console.log('[Git] checkout invalid mode')
                   throw new InternalError(
                     `Invalid mode 0o${mode.toString(8)} detected in blob ${oid}`
                   )
@@ -371,6 +392,7 @@ export async function _checkout({
                 })
               }
             } catch (e) {
+              console.log('[Git] checkout error', e)
               console.log(e)
             }
           })
@@ -380,10 +402,12 @@ export async function _checkout({
   }
 
   // Update HEAD
+  console.log('[Git] checkout noUpdatedHead: ', noUpdatedHead)
   if (!noUpdateHead) {
     const startUpdateHead = performance.now();
 
     const fullRef = await GitRefManager.expand({ fs, gitdir, ref })
+    console.log('[Git] checkout fullRef: ', fullRef)
     if (fullRef.startsWith('refs/heads')) {
       await GitRefManager.writeSymbolicRef({
         fs,
