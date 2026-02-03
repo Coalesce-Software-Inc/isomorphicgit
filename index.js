@@ -5956,6 +5956,10 @@ async function _checkout({
             try {
               if (!fs._writeFiles && method !== 'create-index' && method !== 'mkdir-index') {
                 const { object } = await _readObject({ fs, cache, gitdir, oid });
+                if (!object) {
+                  console.log('[Git] checkout Promise.all object not found: ', oid);
+                  return
+                }
                 if (chmod) {
                   // Note: the mode option of fs.write only works when creating files,
                   // not updating them. Since the `fs` plugin doesn't expose `chmod` this
