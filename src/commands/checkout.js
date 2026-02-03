@@ -413,7 +413,7 @@ export async function _checkout({
   }
 
   // Update HEAD
-  console.log('[Git] checkout noUpdatedHead: ', noUpdatedHead)
+  console.log('[Git] checkout noUpdateHead: ', noUpdateHead)
   if (!noUpdateHead) {
     const startUpdateHead = performance.now();
 

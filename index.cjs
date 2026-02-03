@@ -6023,7 +6023,7 @@ async function _checkout({
   }
 
   // Update HEAD
-  console.log('[Git] checkout noUpdatedHead: ', noUpdatedHead);
+  console.log('[Git] checkout noUpdateHead: ', noUpdateHead);
   if (!noUpdateHead) {
     const fullRef = await GitRefManager.expand({ fs, gitdir, ref });
     console.log('[Git] checkout fullRef: ', fullRef);
