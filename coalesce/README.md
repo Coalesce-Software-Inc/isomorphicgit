@@ -19,3 +19,5 @@
 npm install --legacy-peer-deps
 NODE_OPTIONS=--openssl-legacy-provider npm run build
 ```
+
+Be aware that there will likely be a slew of warning messages.  They look bad, but you can ignore them.
