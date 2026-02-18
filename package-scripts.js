@@ -54,7 +54,7 @@ module.exports = {
         'build.webpack',
         'build.indexjson',
         'build.treeshake',
-        'build.docs',
+        // 'build.docs',
         'build.size',
         'build.pack'
       ),
@@ -126,8 +126,8 @@ module.exports = {
           )
         : series.nps(
             // 'lint',
-            // 'build',
-            // 'test.typecheck',
+            'build',
+            // 'test.typecheck', this is digging into the node_modules improperly, so disable 
             'test.setup',
             'test.jest',
             // 'test.karma',
