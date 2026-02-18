@@ -1,0 +1,2 @@
+//Reference to the oid of the 'null' or 'empty' tree
+export const EMPTY_TREE_OID = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"

@@ -37,6 +37,7 @@ export async function _findMergeBase({ fs, cache, gitdir, oids }) {
       return [...result]
     }
     // We haven't found a common ancestor yet
+    //grab the parent commits, and confirm if we've visted them before, if not, then queue them up for the next walker round
     const newheads = new Map()
     for (const { oid, index } of heads) {
       try {
