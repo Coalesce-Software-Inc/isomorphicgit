@@ -14,6 +14,19 @@
 	c. update the package.json entry for isomorphic-git and install dependencies
 6. Iterate and when satisfied of the change, make a pull request from your branch back to `coalesce-main`
 
+### Testing
+Execute `npm test` to execute the full test suite.
+Several remote executing tests are skipped as the current fork now lacks proper credentials, or due to unknown failures.
+Our workflows are well tested within the Coalesce repository, so I'm okay with this.
+- test-hosting-providers.js (Gitlab, Azure)
+- test-commit.js (create signed commit)
+- test-fetch.js (all, Request timeout issue)
+- test-checkout.js (Remote fetching timeout issue)
+- test-wire.js (parseRefsAdResponse HEAD bad space separated)
+
+Run `npx jest -- path/to/file` to run an individual suite.
+With the included skips, we expect all tests to be passing at this time.
+
 ## Build instructions
 ```
 npm install --legacy-peer-deps

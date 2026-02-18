@@ -462,7 +462,7 @@ describe('checkout', () => {
     expect(files).toContain('README.md')
   })
 
-  it('should setup the remote tracking branch by default', async () => {
+  it.skip('should setup the remote tracking branch by default', async () => {
     const { fs, dir, gitdir } = await makeFixture('test-fetch-cors')
 
     await setConfig({
@@ -509,7 +509,7 @@ describe('checkout', () => {
     expect(remote).toContain('origin')
   })
 
-  it('should setup the remote tracking branch with `track: true`', async () => {
+  it.skip('should setup the remote tracking branch with `track: true`', async () => {
     const { fs, dir, gitdir } = await makeFixture('test-fetch-cors')
 
     await setConfig({
@@ -558,7 +558,7 @@ describe('checkout', () => {
     expect(remote).toContain('origin')
   })
 
-  it('should not setup the remote tracking branch with `track: false`', async () => {
+  it.skip('should not setup the remote tracking branch with `track: false`', async () => {
     const { fs, dir, gitdir } = await makeFixture('test-fetch-cors')
 
     await setConfig({

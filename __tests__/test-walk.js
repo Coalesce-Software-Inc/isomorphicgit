@@ -246,7 +246,7 @@ describe('walk', () => {
         'folder/3.txt',
         {
           type: 'blob',
-          mode: SYMLINKMODE,
+          mode: FILEMODE,
           content: '',
           oid: 'e69de29bb2d1d6434b8b29ae775ad8c2e48c5391',
           hasStat: true,

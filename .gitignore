@@ -1,1 +1,5 @@
 node_modules/
+coverage/
+git-http-mock-server.pid
+cors-proxy.pid
+junit/

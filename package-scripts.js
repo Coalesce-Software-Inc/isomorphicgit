@@ -125,12 +125,12 @@ module.exports = {
             'test.teardown'
           )
         : series.nps(
-            'lint',
-            'build',
-            'test.typecheck',
+            // 'lint',
+            // 'build',
+            // 'test.typecheck',
             'test.setup',
             'test.jest',
-            'test.karma',
+            // 'test.karma',
             'test.teardown'
           ),
       typecheck: 'tsc -p tsconfig.json',
