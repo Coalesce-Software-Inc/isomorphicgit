@@ -69,7 +69,6 @@ export async function _clone({
       await config.set(`http.corsProxy`, corsProxy)
       await GitConfigManager.save({ fs, gitdir, config })
     }
-    console.log('[Git] clone fetch')
     const { defaultBranch, fetchHead } = await _fetch({
       fs,
       cache,
@@ -92,13 +91,10 @@ export async function _clone({
       headers,
       tags: !noTags,
     })
-    console.log('[Git] clone fetchHead: ', fetchHead)
     if (fetchHead === null) return
     ref = ref || defaultBranch
     ref = ref.replace('refs/heads/', '')
-    console.log('[Git] clone ref: ', ref)
     // Checkout that branch
-    console.log('[Git] clone checkout')
     await _checkout({
       fs,
       cache,
@@ -109,9 +105,7 @@ export async function _clone({
       remote,
       noCheckout,
     })
-    console.log('[Git] clone checkout complete')
   } catch (err) {
-    console.log('[Git] clone checkout error: ', err)
     // Remove partial local repository, see #1283
     // Ignore any error as we are already failing.
     // The catch is necessary so the original error is not masked.
