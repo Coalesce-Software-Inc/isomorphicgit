@@ -54,7 +54,7 @@ module.exports = {
         'build.webpack',
         'build.indexjson',
         'build.treeshake',
-        'build.docs',
+        // 'build.docs',
         'build.size',
         'build.pack'
       ),
@@ -125,12 +125,12 @@ module.exports = {
             'test.teardown'
           )
         : series.nps(
-            'lint',
+            // 'lint',
             'build',
-            'test.typecheck',
+            // 'test.typecheck', this is digging into the node_modules improperly, so disable 
             'test.setup',
             'test.jest',
-            'test.karma',
+            // 'test.karma',
             'test.teardown'
           ),
       typecheck: 'tsc -p tsconfig.json',

@@ -17,6 +17,7 @@ describe('mergeFile', () => {
     expect(mergedText).toEqual(await fs.read(`${dir}/aob.txt`, 'utf8'))
   })
 
+
   it('mergeFile a o c', async () => {
     // Setup
     const { fs, dir } = await makeFixture('test-mergeFile')

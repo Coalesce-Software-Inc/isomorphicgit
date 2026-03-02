@@ -5,12 +5,12 @@ import { _commit } from '../commands/commit'
 import { _currentBranch } from '../commands/currentBranch.js'
 import { _findMergeBase } from '../commands/findMergeBase.js'
 import { FastForwardError } from '../errors/FastForwardError.js'
-import { MergeNotSupportedError } from '../errors/MergeNotSupportedError.js'
 import { GitRefManager } from '../managers/GitRefManager.js'
 import { abbreviateRef } from '../utils/abbreviateRef.js'
+import { EMPTY_TREE_OID } from '../utils/constants.js'
 import { mergeTree } from '../utils/mergeTree.js'
+import { resolveVirtualMergeBase } from './resolveVirtualMergeBase.js'
 
-// import diff3 from 'node-diff3'
 /**
  *
  * @typedef {Object} MergeResult - Returns an object with a schema like this:
@@ -98,10 +98,21 @@ export async function _merge({
     gitdir,
     oids: [ourOid, theirOid],
   })
-  if (baseOids.length !== 1) {
-    throw new MergeNotSupportedError()
+
+  let baseOid;
+  if (baseOids.length < 1) {
+    //in the event that there is no common commit ancestor for two branches in a repo (wild)
+    //use the empty tree reference
+    baseOid = EMPTY_TREE_OID;
+  } else if (baseOids.length > 1) {
+    // find the best option of the multiple ancestors
+    //allegedly real git would create a virtual tree by merging the oids together
+    //to form a virtual tree to use as the base for the 3way diff merge later on
+    baseOid = await resolveVirtualMergeBase({ fs, cache, gitdir, oids: baseOids, maxDepth: 5, depth: 0, author, committer, signingKey, onSign })
+  } else {
+    baseOid = baseOids[0]
   }
-  const baseOid = baseOids[0]
+  
   // handle fast-forward case
   if (baseOid === theirOid) {
     return {

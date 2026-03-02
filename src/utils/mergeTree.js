@@ -343,7 +343,12 @@ async function mergeBlobs({
         fullpath = base._fullpath
       }catch(error) {
         //get the path
-        fullpath = ours?._fullpath || theirs._fullpath
+        if (ours && ours._fullpath) {
+          fullpath = ours._fullpath
+        } else {
+          fullpath = theirs._fullpath
+
+        }
       }
       awaitedMergedText = await asyncMergeConflictCallback(mergedText, fullpath, { content: ourContentWithoutLineBreaks, branch: ourName }, { content: theirContentWithoutLineBreaks, branch: theirName }, diffResult);
       //the user deleted all the text, we remove the file
@@ -363,5 +368,9 @@ async function mergeBlobs({
     object: Buffer.from(awaitedMergedText, 'utf8'),
     dryRun,
   })
-  return { mode:ourMode ?? theirMode, path, oid, type }
+  let mode = ourMode
+  if (!mode) {
+    mode = theirMode
+  }
+  return { mode, path, oid, type }
 }

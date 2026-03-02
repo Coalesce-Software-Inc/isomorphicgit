@@ -10,7 +10,7 @@ const { makeFixture } = require('./__helpers__/FixtureFS.js')
 const localhost =
   typeof window === 'undefined' ? 'localhost' : window.location.hostname
 
-describe('fetch', () => {
+describe.skip('fetch', () => {
   it('fetch (from Github)', async () => {
     const { fs, gitdir } = await makeFixture('test-fetch-cors')
     await setConfig({

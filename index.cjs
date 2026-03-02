@@ -8539,6 +8539,7 @@ async function _findMergeBase({ fs, cache, gitdir, oids }) {
       return [...result]
     }
     // We haven't found a common ancestor yet
+    //grab the parent commits, and confirm if we've visted them before, if not, then queue them up for the next walker round
     const newheads = new Map();
     for (const { oid, index } of heads) {
       try {
@@ -8558,6 +8559,9 @@ async function _findMergeBase({ fs, cache, gitdir, oids }) {
   }
   return []
 }
+
+//Reference to the oid of the 'null' or 'empty' tree
+const EMPTY_TREE_OID = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 const LINEBREAKS = /^.*(\r?\n|$)/gm;
 
@@ -8935,7 +8939,12 @@ async function mergeBlobs({
         fullpath = base._fullpath;
       }catch(error) {
         //get the path
-        fullpath = ours?._fullpath || theirs._fullpath;
+        if (ours && ours._fullpath) {
+          fullpath = ours._fullpath;
+        } else {
+          fullpath = theirs._fullpath;
+
+        }
       }
       awaitedMergedText = await asyncMergeConflictCallback(mergedText, fullpath, { content: ourContentWithoutLineBreaks, branch: ourName }, { content: theirContentWithoutLineBreaks, branch: theirName }, diffResult);
       //the user deleted all the text, we remove the file
@@ -8955,12 +8964,85 @@ async function mergeBlobs({
     object: Buffer.from(awaitedMergedText, 'utf8'),
     dryRun,
   });
-  return { mode:ourMode ?? theirMode, path, oid, type }
+  let mode = ourMode;
+  if (!mode) {
+    mode = theirMode;
+  }
+  return { mode, path, oid, type }
+}
+
+/**
+ * @param {object} args
+ * @param {import('../models/FileSystem.js').FileSystem} args.fs
+ * @param {any} args.cache
+ * @param {string} args.gitdir
+ * @param {string[]} args.oids
+ * @param {number} args.depth
+ * @param {number} args.maxDepth
+ * @param {Object} args.author
+ * @param {string} args.author.name
+ * @param {string} args.author.email
+ * @param {number} args.author.timestamp
+ * @param {number} args.author.timezoneOffset
+ * @param {Object} args.committer
+ * @param {string} args.committer.name
+ * @param {string} args.committer.email
+ * @param {number} args.committer.timestamp
+ * @param {number} args.committer.timezoneOffset
+ * @param {string} [args.signingKey]
+ * @param {SignCallback} [args.onSign] - a PGP signing implementation
+ *
+ */
+async function resolveVirtualMergeBase({fs, cache, gitdir, oids, depth, maxDepth, author, committer, signingKey, onSign }) {
+    // During a merge, it's possible for two branches (commits) to have more than one merge base
+    // in order to support merging them as git merge -s ort does, we will follow the same pattern as in that algorithm
+    // When 2 common ancestors were identified by findMergeBase, we find their merge base and attempt to merge them together to create a stable base
+    // When > 2 common ancestors, we must create a virtual tree by recursively to smush all the commits into one base object to proceed with the merge
+    
+    //if we've recursed the maximum amount of times or receive bad input, bail out
+    if (depth > maxDepth || oids.length < 2) {
+        throw new MergeNotSupportedError()
+    } else if (oids.length === 2) {
+        const baseOids = await _findMergeBase({fs, cache, gitdir, oids});
+        if (baseOids.length < 1) {
+            return EMPTY_TREE_OID;
+        } else if (baseOids.length > 1) {
+            //I don't think this should support that many recursive calls before a short circuit occurs
+            //for perf reasons. I'd rather a customer just handle the merge off platform using real git.
+            return await resolveVirtualMergeBase({ fs, cache, gitdir, oids: baseOids, maxDepth, depth: depth + 1, author, committer, signingKey, onSign })
+        } else {
+            //when it's one, then we're allowed to merge the two bases and report back to the caller so they can
+            //continue with their merge
+            const baseOid = baseOids[0];
+            //if this throws bc of merge conflicts, we let it?
+            return await mergeTree({ fs, cache, gitdir, ourOid: oids[0], theirOid: oids[1], baseOid })
+            //do a merge of oids[0], oids[1] & baseOid, pass that sha back out
+
+        }
+    } else {
+        //when >2 we have some work to do :grimmace:
+        //virtual tree
+        const virtualTree = await resolveVirtualMergeBase({ fs, cache, gitdir, oids: [oids[0], oids[1]], depth: depth + 1, maxDepth, author, committer, onSign, signingKey });
+        const tempCommit = await _commit({
+            fs, 
+            cache, 
+            gitdir,
+            ref: oids[0],// use the 1st commit as 'our' ref for name purposes
+            message: "virtual merge base commit", 
+            tree: virtualTree, 
+            parent: [oids[0], oids[1]],
+            author,
+            committer,
+            onSign,
+            signingKey
+        });
+
+        return await resolveVirtualMergeBase({ fs, cache, gitdir, oids: [tempCommit, ...oids.slice(2)], depth: depth + 1, maxDepth, author, committer, onSign, signingKey })
+    }
 }
 
 // @ts-check
 
-// import diff3 from 'node-diff3'
 /**
  *
  * @typedef {Object} MergeResult - Returns an object with a schema like this:
@@ -9048,10 +9130,21 @@ async function _merge({
     gitdir,
     oids: [ourOid, theirOid],
   });
-  if (baseOids.length !== 1) {
-    throw new MergeNotSupportedError()
+
+  let baseOid;
+  if (baseOids.length < 1) {
+    //in the event that there is no common commit ancestor for two branches in a repo (wild)
+    //use the empty tree reference
+    baseOid = EMPTY_TREE_OID;
+  } else if (baseOids.length > 1) {
+    // find the best option of the multiple ancestors
+    //allegedly real git would create a virtual tree by merging the oids together
+    //to form a virtual tree to use as the base for the 3way diff merge later on
+    baseOid = await resolveVirtualMergeBase({ fs, cache, gitdir, oids: baseOids, maxDepth: 5, depth: 0, author, committer, signingKey, onSign });
+  } else {
+    baseOid = baseOids[0];
   }
-  const baseOid = baseOids[0];
+  
   // handle fast-forward case
   if (baseOid === theirOid) {
     return {

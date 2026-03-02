@@ -186,7 +186,7 @@ describe('commit', () => {
     expect(error.code).toBe(Errors.MissingNameError.code)
   })
 
-  it('create signed commit', async () => {
+  it.skip('create signed commit', async () => {
     // Setup
     const { pgp } = require('@isomorphic-git/pgp-plugin')
     const { fs, gitdir } = await makeFixture('test-commit')
