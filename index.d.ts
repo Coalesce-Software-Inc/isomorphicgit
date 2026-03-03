@@ -956,7 +956,7 @@ export function branch({ fs, dir, gitdir, ref, checkout, }: {
  * @param {boolean} [args.track = true] - If false, will not set the remote branch tracking information. Defaults to true.
  * @param {object} [args.cache] - a [cache](cache.md) object
  *
- * @returns {Promise<void>} Resolves successfully when filesystem operations are complete
+ * @returns {Promise<object>} Resolves successfully when filesystem operations are complete, returning a dictionary composed of performance marks in seconds
  *
  * @example
  * // switch to the main branch
@@ -1003,7 +1003,7 @@ export function checkout({ fs, onProgress, dir, gitdir, remote, ref: _ref, filep
     force?: boolean;
     track?: boolean;
     cache?: any;
-}): Promise<void>;
+}): Promise<object>;
 /**
  * Clone a repository
  *
