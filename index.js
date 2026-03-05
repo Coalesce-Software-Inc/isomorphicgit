@@ -5659,6 +5659,13 @@ const worthWalking = (filepath, root) => {
   }
 };
 
+/**
+ * @param {number} startMs
+ */
+const getElapsedSeconds = (startMs) => {
+  return +((performance.now() - startMs) / 1000).toFixed(3);
+}
+
 // @ts-check
 
 /**
@@ -5677,7 +5684,7 @@ const worthWalking = (filepath, root) => {
  * @param {boolean} [args.force]
  * @param {boolean} [args.track]
  *
- * @returns {Promise<void>} Resolves successfully when filesystem operations are complete
+ * @returns {Promise<object>} Resolves successfully when filesystem operations are complete, returning a dictionary composed of performance marks in seconds
  *
  */
 async function _checkout({
@@ -5695,7 +5702,23 @@ async function _checkout({
   force,
   track = true,
 }) {
+  const startTotal = performance.now();
+  const perfSegments = {
+    analyze: 0,
+    conflicts: 0,
+    createDirectories: 0,
+    deleteDirectories: 0,
+    deleteFiles: 0,
+    errors: 0,
+    resolveRemote: 0,
+    updateHead: 0,
+    writes: 0,
+    total: 0,
+  };
+
   // Get tree oid
+  const startResolveRemote = performance.now();
+
   let oid;
   try {
     oid = await GitRefManager.resolve({ fs, gitdir, ref });
@@ -5726,9 +5749,12 @@ async function _checkout({
       value: oid,
     });
   }
+  perfSegments.resolveRemote = getElapsedSeconds(startResolveRemote);
 
   // Update working dir
   if (!noCheckout) {
+    const startAnalyze = performance.now();
+
     let ops;
     // First pass - just analyze files (not directories) and figure out what needs to be done
     try {
@@ -5756,19 +5782,28 @@ async function _checkout({
     if(onProgress) {
       await onProgress({ total: 0, phase: "post-analyze", loaded: 0});
     }
+    perfSegments.analyze = getElapsedSeconds(startAnalyze);
   
     // Report conflicts
+    const startConflicts = performance.now();
+
     const conflicts = ops
       .filter(([method]) => method === 'conflict')
       .map(([method, fullpath]) => fullpath);
+    perfSegments.conflicts = getElapsedSeconds(startConflicts);
+
     if (conflicts.length > 0) {
       throw new CheckoutConflictError(conflicts)
     }
 
     // Collect errors
+    const startErrors = performance.now();
+
     const errors = ops
       .filter(([method]) => method === 'error')
       .map(([method, fullpath]) => fullpath);
+    perfSegments.errors = getElapsedSeconds(startErrors);
+
     if (errors.length > 0) {
       throw new InternalError(errors.join(', '))
     }
@@ -5776,7 +5811,8 @@ async function _checkout({
     if (dryRun) {
       // Since the format of 'ops' is in flux, I really would rather folk besides myself not start relying on it
       // return ops
-      return
+      perfSegments.total = getElapsedSeconds(startTotal);
+      return perfSegments;
     }
 
     // Second pass - execute planned changes
@@ -5786,6 +5822,8 @@ async function _checkout({
     let count = 0;
     const total = ops.length;
     //if we're going to do a majority of just pure file writes/updates, then lets read
+    const startDeleteFiles = performance.now();
+
     await GitIndexManager.acquire({ fs, gitdir, cache }, async function(index) {
       //delete many only when fs has correct extra method
       if (fs._unlinkMany) {
@@ -5813,8 +5851,11 @@ async function _checkout({
           })
       );
     });
+    perfSegments.deleteFiles = getElapsedSeconds(startDeleteFiles);
 
     // Note: this is cannot be done naively in parallel
+    const startDeleteDirectories = performance.now();
+
     await GitIndexManager.acquire({ fs, gitdir, cache }, async function(index) {
       for (const [method, fullpath] of ops) {
         if (method === 'rmdir' || method === 'rmdir-index') {
@@ -5843,6 +5884,9 @@ async function _checkout({
         }
       }
     });
+    perfSegments.deleteDirectories = getElapsedSeconds(startDeleteDirectories);
+
+    const startCreateDirectories = performance.now();
 
     await Promise.all(
       ops
@@ -5859,6 +5903,9 @@ async function _checkout({
           }
         })
     );
+    perfSegments.createDirectories = getElapsedSeconds(startCreateDirectories);
+
+    const startWrites = performance.now();
 
     await GitIndexManager.acquire({ fs, gitdir, cache }, async function(index) {
       //only execute this enhanced performance methodology if our fs has the required internal functions, otherwise run the standard path
@@ -5973,10 +6020,13 @@ async function _checkout({
           })
       );
     });
+    perfSegments.writes = getElapsedSeconds(startWrites);
   }
 
   // Update HEAD
   if (!noUpdateHead) {
+    const startUpdateHead = performance.now();
+
     const fullRef = await GitRefManager.expand({ fs, gitdir, ref });
     if (fullRef.startsWith('refs/heads')) {
       await GitRefManager.writeSymbolicRef({
@@ -5989,7 +6039,11 @@ async function _checkout({
       // detached head
       await GitRefManager.writeRef({ fs, gitdir, ref: 'HEAD', value: oid });
     }
+    perfSegments.updateHead = getElapsedSeconds(startUpdateHead);
   }
+
+  perfSegments.total = getElapsedSeconds(startTotal);
+  return perfSegments;
 }
 
 async function readAllFiles({
