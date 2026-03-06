@@ -307,6 +307,72 @@ access it.
 00000009done
 `)
   })
+  it('writeUploadPackRequest with shallow lines', async () => {
+    const req = {
+      capabilities: ['agent=test/1.0'],
+      wants: ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'],
+      shallows: ['bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'],
+    }
+    const result = writeUploadPackRequest(req)
+    const buffer = Buffer.from(await collect(result))
+    const output = buffer.toString('utf8')
+    expect(output).toContain('shallow bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
+    expect(output).not.toContain('deepen')
+  })
+  it('writeUploadPackRequest with unshallow sends deepen 2147483647', async () => {
+    const req = {
+      capabilities: ['agent=test/1.0'],
+      wants: ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'],
+      shallows: ['bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'],
+      unshallow: true,
+    }
+    const result = writeUploadPackRequest(req)
+    const buffer = Buffer.from(await collect(result))
+    const output = buffer.toString('utf8')
+    // Must still send shallow lines even when unshallowing
+    expect(output).toContain('shallow bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
+    // Must send deepen with INT32_MAX
+    expect(output).toContain('deepen 2147483647')
+  })
+  it('writeUploadPackRequest with unshallow ignores depth', async () => {
+    const req = {
+      capabilities: ['agent=test/1.0'],
+      wants: ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'],
+      shallows: ['bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'],
+      unshallow: true,
+      depth: 5,
+    }
+    const result = writeUploadPackRequest(req)
+    const buffer = Buffer.from(await collect(result))
+    const output = buffer.toString('utf8')
+    // unshallow takes precedence over depth
+    expect(output).toContain('deepen 2147483647')
+    expect(output).not.toContain('deepen 5')
+  })
+  it('writeUploadPackRequest with filter', async () => {
+    const req = {
+      capabilities: ['agent=test/1.0'],
+      wants: ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'],
+      filter: 'blob:limit=2097152',
+    }
+    const result = writeUploadPackRequest(req)
+    const buffer = Buffer.from(await collect(result))
+    const output = buffer.toString('utf8')
+    expect(output).toContain('filter blob:limit=2097152')
+  })
+  it('writeUploadPackRequest with filter and depth', async () => {
+    const req = {
+      capabilities: ['agent=test/1.0'],
+      wants: ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'],
+      filter: 'blob:none',
+      depth: 3,
+    }
+    const result = writeUploadPackRequest(req)
+    const buffer = Buffer.from(await collect(result))
+    const output = buffer.toString('utf8')
+    expect(output).toContain('filter blob:none')
+    expect(output).toContain('deepen 3')
+  })
   it('parseUploadPackRequest', async () => {
     const req = [
       Buffer.from(`008awant fb74ea1a9b6a9601df18c38d3de751c51f064bf7 multi_ack_detailed no-done side-band-64k thin-pack ofs-delta agent=git/2.10.1.windows.1

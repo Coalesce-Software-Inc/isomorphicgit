@@ -1,3 +1,8 @@
+// Polyfill performance for Node environments where it's not global (fixes PR #9 perf timing)
+if (typeof performance === 'undefined') {
+  globalThis.performance = { now: () => Date.now() }
+}
+
 import http from 'isomorphic-git/http'
 
 /* eslint-env node, browser, jasmine */
@@ -606,4 +611,5 @@ describe('checkout', () => {
     expect(merge).toBeUndefined()
     expect(remote).toBeUndefined()
   })
+
 })

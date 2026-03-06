@@ -52,6 +52,8 @@ import { writeUploadPackRequest } from '../wire/writeUploadPackRequest.js'
  * @param {string} [args.remote]
  * @param {boolean} [args.singleBranch = false]
  * @param {boolean} [args.tags = false]
+ * @param {boolean} [args.unshallow = false]
+ * @param {string} [args.filter]
  * @param {number} [args.depth]
  * @param {Date} [args.since]
  * @param {string[]} [args.exclude = []]
@@ -78,6 +80,8 @@ export async function _fetch({
   remote: _remote,
   url: _url,
   corsProxy,
+  unshallow = false,
+  filter = null,
   depth = null,
   since = null,
   exclude = [],
@@ -132,6 +136,9 @@ export async function _fetch({
     }
   }
   // Check that the remote supports the requested features
+  if (filter !== null && !remoteHTTP.capabilities.has('filter')) {
+    throw new RemoteCapabilityError('filter', 'filter')
+  }
   if (depth !== null && !remoteHTTP.capabilities.has('shallow')) {
     throw new RemoteCapabilityError('shallow', 'depth')
   }
@@ -177,6 +184,7 @@ export async function _fetch({
       `agent=${pkg.agent}`,
     ]
   )
+  if (filter) capabilities.push('filter')
   if (relative) capabilities.push('deepen-relative')
   // Start figuring out which oids from the remote we want to request
   const wants = singleBranch ? [oid] : remoteRefs.values()
@@ -207,6 +215,8 @@ export async function _fetch({
     wants,
     haves,
     shallows,
+    unshallow,
+    filter,
     depth,
     since,
     exclude,
@@ -228,10 +238,14 @@ export async function _fetch({
   if (raw.headers) {
     response.headers = raw.headers
   }
-  // Apply all the 'shallow' and 'unshallow' commands
+  // Apply all the 'shallow' and 'unshallow' commands.
+  // Note on partial clone: this loop processes commit OIDs (not blobs), and commit
+  // objects are never excluded by blob:limit filters. The try/catch below is a
+  // pre-existing defensive pattern — if readObject fails for any reason (e.g. missing
+  // test fixtures, corrupt pack), we conservatively mark the commit as a shallow
+  // boundary rather than crashing the fetch.
   for (const oid of response.shallows) {
     if (!oids.has(oid)) {
-      // this is in a try/catch mostly because my old test fixtures are missing objects
       try {
         // server says it's shallow, but do we have the parents?
         const { object } = await readObject({ fs, cache, gitdir, oid })
