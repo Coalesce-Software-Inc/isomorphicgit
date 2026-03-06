@@ -238,10 +238,14 @@ export async function _fetch({
   if (raw.headers) {
     response.headers = raw.headers
   }
-  // Apply all the 'shallow' and 'unshallow' commands
+  // Apply all the 'shallow' and 'unshallow' commands.
+  // Note on partial clone: this loop processes commit OIDs (not blobs), and commit
+  // objects are never excluded by blob:limit filters. The try/catch below is a
+  // pre-existing defensive pattern — if readObject fails for any reason (e.g. missing
+  // test fixtures, corrupt pack), we conservatively mark the commit as a shallow
+  // boundary rather than crashing the fetch.
   for (const oid of response.shallows) {
     if (!oids.has(oid)) {
-      // this is in a try/catch mostly because my old test fixtures are missing objects
       try {
         // server says it's shallow, but do we have the parents?
         const { object } = await readObject({ fs, cache, gitdir, oid })
