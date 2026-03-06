@@ -265,7 +265,9 @@ export async function _checkout({
 
     // Write phase: materialize blobs to working directory.
     // Two code paths: bulk write (when fs supports _writeFiles/_unlinkMany) and standard write.
-    // With partial clone (filter), some blobs may be missing (filtered out), so those are skipped.
+    // With partial clone (filter), some blobs may be missing — those are skipped and tracked
+    // in skippedFiles so we can report them and avoid lstat/index.insert on non-existent files.
+    const skippedFiles = new Set()
     await GitIndexManager.acquire({ fs, gitdir, cache }, async function(index) {
       if (fs._writeFiles && fs._unlinkMany) {
         const writeOps = ops.filter(([method]) => method === "create" || method === "update");
@@ -278,10 +280,19 @@ export async function _checkout({
           if (chmod) {
             deletes.push(filepath);
           }
-          // Partial clone: object may be missing if excluded by filter (e.g. blob:limit).
-          // In that case readObject returns null and we skip writing this file.
-          const { object } = await readObject({ fs, cache, gitdir, oid });
-          if (!object) {
+          const { object, type } = await readObject({ fs, cache, gitdir, oid, allowMissing: true });
+          // Partial clone: object may be missing if excluded by a server-side filter
+          // (e.g. blob:limit=xxx). allowMissing lets _readObject return null
+          // instead of throwing NotFoundError, so we can skip this file gracefully.
+          if (object === null && type === null) { // !object would work, but tightening check for clarity
+            skippedFiles.add(fullpath)
+            if (onProgress) {
+              await onProgress({
+                phase: 'Skipping filtered object',
+                loaded: ++count, // count skipped files for progress reporting since ops includes both skipped and written files
+                total,
+              })
+            }
             continue;
           }
           const write = [filepath, object];
@@ -334,9 +345,19 @@ export async function _checkout({
             const filepath = `${dir}/${fullpath}`
             try {
               if (!fs._writeFiles && method !== 'create-index' && method !== 'mkdir-index') {
-                // Partial clone: object may be missing if excluded by filter.
-                const { object } = await readObject({ fs, cache, gitdir, oid })
-                if (!object) {
+                const { object, type } = await readObject({ fs, cache, gitdir, oid, allowMissing: true })
+                // Partial clone: object may be missing if excluded by a server-side filter
+                // (e.g. blob:limit=xxx). allowMissing lets _readObject return null
+                // instead of throwing NotFoundError, so we can skip this file gracefully.
+                if (object === null && type === null) { // !object would work, but tightening check for clarity
+                  skippedFiles.add(fullpath)
+                  if (onProgress) {
+                    await onProgress({
+                      phase: 'Skipping filtered object',
+                      loaded: ++count, // count skipped files for progress reporting since ops includes both skipped and written files
+                      total,
+                    })
+                  }
                   return
                 }
                 if (chmod) {
@@ -359,6 +380,14 @@ export async function _checkout({
                     `Invalid mode 0o${mode.toString(8)} detected in blob ${oid}`
                   )
                 }
+              }
+              // When the bulk write path (fs._writeFiles) skipped a filtered-out blob,
+              // but this Promise.all block still runs for the same op. Guard against lstat
+              // on the non-existent file and skip the index insert for filtered-out files
+              // are intentionally omitted from the git index since we have no on-demand
+              // fetch mechanism and don't want status to report them as deleted.
+              if (skippedFiles.has(fullpath)) {
+                return
               }
               const stats = await fs.lstat(filepath)
               // We can't trust the executable bit returned by lstat on Windows,
