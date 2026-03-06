@@ -28,6 +28,7 @@ import { normalizeCommitterObject } from '../utils/normalizeCommitterObject.js'
  * @param {string} [args.remoteRef] - (Added in 1.1.0) The name of the branch on the remote to fetch. By default this is the configured remote tracking branch.
  * @param {string} [args.corsProxy] - Optional [CORS proxy](https://www.npmjs.com/%40isomorphic-git/cors-proxy). Overrides value in repo config.
  * @param {boolean} [args.singleBranch = false] - Instead of the default behavior of fetching all the branches, only fetch a single branch.
+ * @param {string} [args.filter] - Partial clone filter spec sent to the server. Limits which objects the server includes in the packfile. Common values: `'blob:limit=2097152'` (exclude blobs larger than 2MB), `'blob:none'` (exclude all blobs), `'tree:0'` (exclude all trees). Values are in bytes by default; `k`, `m`, and `g` suffixes are also supported (e.g. `'blob:limit=2m'`). Requires server support for the `filter` capability. Filtered-out objects will be skipped during checkout.
  * @param {boolean} [args.fastForwardOnly = false] - Only perform simple fast-forward merges. (Don't create merge commits.)
  * @param {Object<string, string>} [args.headers] - Additional headers to include in HTTP requests, similar to git's `extraHeader` config
  * @param {Object} [args.author] - The details about the author.
@@ -73,6 +74,7 @@ export async function pull({
   fastForwardOnly = false,
   corsProxy,
   singleBranch,
+  filter,
   headers = {},
   author: _author,
   committer: _committer,
@@ -114,6 +116,7 @@ export async function pull({
       fastForwardOnly,
       corsProxy,
       singleBranch,
+      filter,
       headers,
       author,
       committer,
