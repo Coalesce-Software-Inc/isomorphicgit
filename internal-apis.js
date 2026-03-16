@@ -133,289 +133,6 @@ class FastForwardError extends BaseError {
 /** @type {'FastForwardError'} */
 FastForwardError.code = 'FastForwardError';
 
-/**
- * @typedef {Object} GitProgressEvent
- * @property {string} phase
- * @property {number} loaded
- * @property {number} total
- */
-
-/**
- * @callback ProgressCallback
- * @param {GitProgressEvent} progress
- * @returns {void | Promise<void>}
- */
-
-/**
- * @typedef {Object} GitHttpRequest
- * @property {string} url - The URL to request
- * @property {string} [method='GET'] - The HTTP method to use
- * @property {Object<string, string>} [headers={}] - Headers to include in the HTTP request
- * @property {Object} [agent] - An HTTP or HTTPS agent that manages connections for the HTTP client (Node.js only)
- * @property {AsyncIterableIterator<Uint8Array>} [body] - An async iterator of Uint8Arrays that make up the body of POST requests
- * @property {ProgressCallback} [onProgress] - Reserved for future use (emitting `GitProgressEvent`s)
- * @property {object} [signal] - Reserved for future use (canceling a request)
- */
-
-/**
- * @typedef {Object} GitHttpResponse
- * @property {string} url - The final URL that was fetched after any redirects
- * @property {string} [method] - The HTTP method that was used
- * @property {Object<string, string>} [headers] - HTTP response headers
- * @property {AsyncIterableIterator<Uint8Array>} [body] - An async iterator of Uint8Arrays that make up the body of the response
- * @property {number} statusCode - The HTTP status code
- * @property {string} statusMessage - The HTTP status message
- */
-
-/**
- * @callback HttpFetch
- * @param {GitHttpRequest} request
- * @returns {Promise<GitHttpResponse>}
- */
-
-/**
- * @typedef {Object} HttpClient
- * @property {HttpFetch} request
- */
-
-/**
- * A git commit object.
- *
- * @typedef {Object} CommitObject
- * @property {string} message Commit message
- * @property {string} tree SHA-1 object id of corresponding file tree
- * @property {string[]} parent an array of zero or more SHA-1 object ids
- * @property {Object} author
- * @property {string} author.name The author's name
- * @property {string} author.email The author's email
- * @property {number} author.timestamp UTC Unix timestamp in seconds
- * @property {number} author.timezoneOffset Timezone difference from UTC in minutes
- * @property {Object} committer
- * @property {string} committer.name The committer's name
- * @property {string} committer.email The committer's email
- * @property {number} committer.timestamp UTC Unix timestamp in seconds
- * @property {number} committer.timezoneOffset Timezone difference from UTC in minutes
- * @property {string} [gpgsig] PGP signature (if present)
- */
-
-/**
- * An entry from a git tree object. Files are called 'blobs' and directories are called 'trees'.
- *
- * @typedef {Object} TreeEntry
- * @property {string} mode the 6 digit hexadecimal mode
- * @property {string} path the name of the file or directory
- * @property {string} oid the SHA-1 object id of the blob or tree
- * @property {'commit'|'blob'|'tree'} type the type of object
- */
-
-/**
- * A git tree object. Trees represent a directory snapshot.
- *
- * @typedef {TreeEntry[]} TreeObject
- */
-
-/**
- * A git annotated tag object.
- *
- * @typedef {Object} TagObject
- * @property {string} object SHA-1 object id of object being tagged
- * @property {'blob' | 'tree' | 'commit' | 'tag'} type the type of the object being tagged
- * @property {string} tag the tag name
- * @property {Object} tagger
- * @property {string} tagger.name the tagger's name
- * @property {string} tagger.email the tagger's email
- * @property {number} tagger.timestamp UTC Unix timestamp in seconds
- * @property {number} tagger.timezoneOffset timezone difference from UTC in minutes
- * @property {string} message tag message
- * @property {string} [gpgsig] PGP signature (if present)
- */
-
-/**
- * @typedef {Object} ReadCommitResult
- * @property {string} oid - SHA-1 object id of this commit
- * @property {CommitObject} commit - the parsed commit object
- * @property {string} payload - PGP signing payload
- */
-
-/**
- * @typedef {Object} ServerRef - This object has the following schema:
- * @property {string} ref - The name of the ref
- * @property {string} oid - The SHA-1 object id the ref points to
- * @property {string} [target] - The target ref pointed to by a symbolic ref
- * @property {string} [peeled] - If the oid is the SHA-1 object id of an annotated tag, this is the SHA-1 object id that the annotated tag points to
- */
-
-/**
- * @typedef Walker
- * @property {Symbol} Symbol('GitWalkerSymbol')
- */
-
-/**
- * Normalized subset of filesystem `stat` data:
- *
- * @typedef {Object} Stat
- * @property {number} ctimeSeconds
- * @property {number} ctimeNanoseconds
- * @property {number} mtimeSeconds
- * @property {number} mtimeNanoseconds
- * @property {number} dev
- * @property {number} ino
- * @property {number} mode
- * @property {number} uid
- * @property {number} gid
- * @property {number} size
- */
-
-/**
- * The `WalkerEntry` is an interface that abstracts computing many common tree / blob stats.
- *
- * @typedef {Object} WalkerEntry
- * @property {function(): Promise<'tree'|'blob'|'special'|'commit'>} type
- * @property {function(): Promise<number>} mode
- * @property {function(): Promise<string>} oid
- * @property {function(): Promise<Uint8Array|void>} content
- * @property {function(): Promise<Stat>} stat
- */
-
-/**
- * @typedef {Object} CallbackFsClient
- * @property {function} readFile - https://nodejs.org/api/fs.html#fs_fs_readfile_path_options_callback
- * @property {function} writeFile - https://nodejs.org/api/fs.html#fs_fs_writefile_file_data_options_callback
- * @property {function} unlink - https://nodejs.org/api/fs.html#fs_fs_unlink_path_callback
- * @property {function} readdir - https://nodejs.org/api/fs.html#fs_fs_readdir_path_options_callback
- * @property {function} mkdir - https://nodejs.org/api/fs.html#fs_fs_mkdir_path_mode_callback
- * @property {function} rmdir - https://nodejs.org/api/fs.html#fs_fs_rmdir_path_callback
- * @property {function} stat - https://nodejs.org/api/fs.html#fs_fs_stat_path_options_callback
- * @property {function} lstat - https://nodejs.org/api/fs.html#fs_fs_lstat_path_options_callback
- * @property {function} [readlink] - https://nodejs.org/api/fs.html#fs_fs_readlink_path_options_callback
- * @property {function} [symlink] - https://nodejs.org/api/fs.html#fs_fs_symlink_target_path_type_callback
- * @property {function} [chmod] - https://nodejs.org/api/fs.html#fs_fs_chmod_path_mode_callback
- */
-
-/**
- * @typedef {Object} PromiseFsClient
- * @property {Object} promises
- * @property {function} promises.readFile - https://nodejs.org/api/fs.html#fs_fspromises_readfile_path_options
- * @property {function} promises.writeFile - https://nodejs.org/api/fs.html#fs_fspromises_writefile_file_data_options
- * @property {function} promises.unlink - https://nodejs.org/api/fs.html#fs_fspromises_unlink_path
- * @property {function} promises.readdir - https://nodejs.org/api/fs.html#fs_fspromises_readdir_path_options
- * @property {function} promises.mkdir - https://nodejs.org/api/fs.html#fs_fspromises_mkdir_path_options
- * @property {function} promises.rmdir - https://nodejs.org/api/fs.html#fs_fspromises_rmdir_path
- * @property {function} promises.stat - https://nodejs.org/api/fs.html#fs_fspromises_stat_path_options
- * @property {function} promises.lstat - https://nodejs.org/api/fs.html#fs_fspromises_lstat_path_options
- * @property {function} [promises.readlink] - https://nodejs.org/api/fs.html#fs_fspromises_readlink_path_options
- * @property {function} [promises.symlink] - https://nodejs.org/api/fs.html#fs_fspromises_symlink_target_path_type
- * @property {function} [promises.chmod] - https://nodejs.org/api/fs.html#fs_fspromises_chmod_path_mode
- */
-
-/**
- * @typedef {CallbackFsClient | PromiseFsClient} FsClient
- */
-
-/**
- * @callback MessageCallback
- * @param {string} message
- * @returns {void | Promise<void>}
- */
-
-/**
- * @typedef {Object} GitAuth
- * @property {string} [username]
- * @property {string} [password]
- * @property {Object<string, string>} [headers]
- * @property {boolean} [cancel] Tells git to throw a `UserCanceledError` (instead of an `HttpError`).
- */
-
-/**
- * @callback AuthCallback
- * @param {string} url
- * @param {GitAuth} auth Might have some values if the URL itself originally contained a username or password.
- * @returns {GitAuth | void | Promise<GitAuth | void>}
- */
-
-/**
- * @callback AuthFailureCallback
- * @param {string} url
- * @param {GitAuth} auth The credentials that failed
- * @returns {GitAuth | void | Promise<GitAuth | void>}
- */
-
-/**
- * @callback AuthSuccessCallback
- * @param {string} url
- * @param {GitAuth} auth
- * @returns {void | Promise<void>}
- */
-
-/**
- * @typedef {Object} SignParams
- * @property {string} payload - a plaintext message
- * @property {string} secretKey - an 'ASCII armor' encoded PGP key (technically can actually contain _multiple_ keys)
- */
-
-/**
- * @callback SignCallback
- * @param {SignParams} args
- * @return {{signature: string} | Promise<{signature: string}>} - an 'ASCII armor' encoded "detached" signature
- */
-
-/**
- * @callback WalkerMap
- * @param {string} filename
- * @param {WalkerEntry[]} entries
- * @returns {Promise<any>}
- */
-
-/**
- * @callback WalkerReduce
- * @param {any} parent
- * @param {any[]} children
- * @returns {Promise<any>}
- */
-
-/**
- * @callback WalkerIterateCallback
- * @param {WalkerEntry[]} entries
- * @returns {Promise<any[]>}
- */
-
-/**
- * @callback WalkerIterate
- * @param {WalkerIterateCallback} walk
- * @param {IterableIterator<WalkerEntry[]>} children
- * @returns {Promise<any[]>}
- */
-
-/**
- * @typedef {Object} RefUpdateStatus
- * @property {boolean} ok
- * @property {string} error
- */
-
-/**
- * @typedef {Object} PushResult
- * @property {boolean} ok
- * @property {?string} error
- * @property {Object<string, RefUpdateStatus>} refs
- * @property {Object<string, string>} [headers]
- */
-
-/**
- * @typedef {0|1} HeadStatus
- */
-
-/**
- * @typedef {0|1|2} WorkdirStatus
- */
-
-/**
- * @typedef {0|1|2|3} StageStatus
- */
-
-/**
- * @typedef {[string, HeadStatus, WorkdirStatus, StageStatus]} StatusRow
- */
-
 class GitPushError extends BaseError {
   /**
    * @param {string} prettyDetails
@@ -1095,12 +812,12 @@ class GitConfig {
       const extractedSection = extractSectionLine(trimmedLine);
       const isSection = extractedSection != null;
       if (isSection) {
-        ;[section, subsection] = extractedSection;
+[section, subsection] = extractedSection;
       } else {
         const extractedVariable = extractVariableLine(trimmedLine);
         const isVariable = extractedVariable != null;
         if (isVariable) {
-          ;[name, value] = extractedVariable;
+[name, value] = extractedVariable;
         }
       }
 
@@ -2408,31 +2125,8 @@ async function parseHeader(reader) {
 
 /* eslint-env node, browser */
 
-let supportsDecompressionStream = false;
-
 async function inflate(buffer) {
-  if (supportsDecompressionStream === null) {
-    supportsDecompressionStream = testDecompressionStream();
-  }
-  return supportsDecompressionStream
-    ? browserInflate(buffer)
-    : pako.inflate(buffer)
-}
-
-async function browserInflate(buffer) {
-  const ds = new DecompressionStream('deflate');
-  const d = new Blob([buffer]).stream().pipeThrough(ds);
-  return new Uint8Array(await new Response(d).arrayBuffer())
-}
-
-function testDecompressionStream() {
-  try {
-    const ds = new DecompressionStream('deflate');
-    if (ds) return true
-  } catch (_) {
-    // no bother
-  }
-  return false
+  return  pako.inflate(buffer)
 }
 
 function toHex(buffer) {
@@ -2898,6 +2592,9 @@ async function readObjectPacked({
  * @param {string} args.gitdir
  * @param {string} args.oid
  * @param {string} [args.format]
+ * @param {boolean} [args.allowMissing] - If true, return {object: null, type: null}
+ *   instead of throwing NotFoundError when the object is not found. Used by checkout
+ *   during partial clone when blobs may have been excluded by a filter (e.g. blob:limit).
  */
 async function _readObject({
   fs,
@@ -2905,6 +2602,7 @@ async function _readObject({
   gitdir,
   oid,
   format = 'content',
+  allowMissing = false,
 }) {
   // Curry the current read method so that the packfile un-deltification
   // process can acquire external ref-deltas.
@@ -2933,6 +2631,12 @@ async function _readObject({
   }
   // Finally
   if (!result) {
+    if (allowMissing) {
+      // Partial clone: the object was excluded by a filter (e.g. blob:limit=xxx).
+      // Return a sentinel to enable callers (e.g. checkout) to skip the file confidently
+      // rather than throwing NotFoundError.
+      return { object: null, type: null }
+    }
     throw new NotFoundError(oid)
   }
 
@@ -5928,28 +5632,113 @@ async function writeReceivePackRequest({
   return packstream
 }
 
+/**
+ * Builds a git-upload-pack request per the Git pack protocol v1.
+ *
+ * The upload-pack request is how a git client tells the server which objects
+ * it needs. The request is a sequence of pkt-lines with this structure:
+ *
+ *   want <oid> <capabilities>\n   — objects the client wants (branch tips, tags)
+ *   want <oid>\n                  — additional wants (no capabilities after first line)
+ *   shallow <oid>\n               — shallow boundaries (see below)
+ *   filter <spec>\n               — partial clone filter (see below)
+ *   deepen <N>\n                  — depth limit / unshallow request (see below)
+ *   deepen-since <timestamp>\n    — date-based depth limit
+ *   deepen-not <ref>\n            — exclude commits reachable from ref
+ *   flush-pkt                     — separator
+ *   have <oid>\n                  — objects the client already has
+ *   done\n                        — end of negotiation
+ *
+ * ## Shallow Clones & Boundaries
+ *
+ * A shallow clone (e.g. `depth: 3`) only fetches the last N commits. The
+ * oldest commits in a shallow clone are called "shallow boundaries" — they
+ * have parent pointers in their metadata, but those parents don't exist
+ * locally. Git records these boundary OIDs in `.git/shallow`.
+ *
+ * Example with depth 3 on a branch A→B→C→D→E (E = HEAD):
+ *
+ *   Full history:    A → B → C → D → E
+ *   Shallow clone:             C → D → E
+ *                               ^
+ *                          shallow boundary (recorded in .git/shallow)
+ *
+ * On subsequent fetches, the client MUST send `shallow <oid>` lines so the
+ * server knows where the client's history ends. Without these, the server
+ * assumes the client has full history and may send delta-compressed objects
+ * referencing parents the client doesn't have.
+ *
+ * ## Unshallowing (Converting Shallow → Full Clone)
+ *
+ * To retrieve the full history that was previously excluded:
+ *
+ *   1. Client sends `shallow <oid>` lines as usual (tells server the boundaries)
+ *   2. Client sends `deepen 2147483647` (INT32_MAX — effectively "give me everything")
+ *   3. Server sends all missing history plus `unshallow <oid>` responses
+ *   4. Client removes those OIDs from `.git/shallow` (via GitShallowManager)
+ *
+ * `unshallow` and `depth` are mutually exclusive — if you're requesting full
+ * history, a specific depth limit would be contradictory.
+ *
+ * ## Partial Clone Filters
+ *
+ * The `filter` parameter (e.g. `blob:limit=2097152`) tells the server to
+ * exclude certain objects from the packfile. The server omits matching objects
+ * entirely — they won't exist in the local object store. This is independent
+ * of shallow/depth and can be combined with either.
+ *
+ * @param {object} args
+ * @param {string[]} args.capabilities - Protocol capabilities to advertise
+ * @param {string[]} args.wants - OIDs of objects the client wants
+ * @param {string[]} args.haves - OIDs of objects the client already has
+ * @param {string[]} args.shallows - OIDs of current shallow boundary commits
+ * @param {boolean} args.unshallow - If true, request full history (deepen INT32_MAX)
+ * @param {string|null} args.filter - Partial clone filter spec (e.g. 'blob:limit=2097152')
+ * @param {number|null} args.depth - Shallow clone depth limit
+ * @param {Date|null} args.since - Date-based depth limit
+ * @param {string[]} args.exclude - Refs whose reachable commits should be excluded
+ * @returns {Array} Array of pkt-line encoded buffers
+ */
 function writeUploadPackRequest({
   capabilities = [],
   wants = [],
   haves = [],
   shallows = [],
+  unshallow = false,
+  filter = null,
   depth = null,
   since = null,
   exclude = [],
 }) {
   const packstream = [];
   wants = [...new Set(wants)]; // remove duplicates
+
+  // First want line carries the capability advertisement
   let firstLineCapabilities = ` ${capabilities.join(' ')}`;
   for (const oid of wants) {
     packstream.push(GitPktLine.encode(`want ${oid}${firstLineCapabilities}\n`));
     firstLineCapabilities = '';
   }
+
+  // Always send shallow boundaries so the server knows where the client's
+  // commit history ends. Required for both normal shallow fetches and unshallow.
   for (const oid of shallows) {
     packstream.push(GitPktLine.encode(`shallow ${oid}\n`));
   }
-  if (depth !== null) {
+
+  // Partial clone: tell the server to exclude objects matching the filter spec
+  if (filter !== null) {
+    packstream.push(GitPktLine.encode(`filter ${filter}\n`));
+  }
+
+  // Depth negotiation: unshallow requests full history (INT32_MAX depth),
+  // otherwise use the explicit depth if provided. These are mutually exclusive.
+  if (unshallow) {
+    packstream.push(GitPktLine.encode(`deepen 2147483647\n`));
+  } else if (depth !== null) {
     packstream.push(GitPktLine.encode(`deepen ${depth}\n`));
   }
+
   if (since !== null) {
     packstream.push(
       GitPktLine.encode(`deepen-since ${Math.floor(since.valueOf() / 1000)}\n`)
@@ -5958,7 +5747,11 @@ function writeUploadPackRequest({
   for (const oid of exclude) {
     packstream.push(GitPktLine.encode(`deepen-not ${oid}\n`));
   }
+
+  // Flush separates the want/shallow/deepen section from the have section
   packstream.push(GitPktLine.flush());
+
+  // Tell the server which objects we already have (for negotiation)
   for (const oid of haves) {
     packstream.push(GitPktLine.encode(`have ${oid}\n`));
   }

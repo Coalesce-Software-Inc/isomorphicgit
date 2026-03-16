@@ -36,6 +36,8 @@ import { join } from '../utils/join.js'
  * @param {string} [args.ref] - Which branch to fetch if `singleBranch` is true. By default this is the current branch or the remote's default branch.
  * @param {string} [args.remoteRef] - The name of the branch on the remote to fetch if `singleBranch` is true. By default this is the configured remote tracking branch.
  * @param {boolean} [args.tags = false] - Also fetch tags
+ * @param {boolean} [args.unshallow = false] - Convert a shallow clone to a full clone by requesting complete commit history from the server. Sends `deepen 2147483647` in the upload-pack request. Mutually exclusive with `depth`.
+ * @param {string} [args.filter] - Partial clone filter spec sent to the server. Limits which objects the server includes in the packfile. Common values: `'blob:limit=2097152'` (exclude blobs larger than 2MB), `'blob:none'` (exclude all blobs), `'tree:0'` (exclude all trees). Values are in bytes by default; `k`, `m`, and `g` suffixes are also supported (e.g. `'blob:limit=2m'`). Requires server support for the `filter` capability. Filtered-out objects will be skipped during checkout.
  * @param {number} [args.depth] - Integer. Determines how much of the git repository's history to retrieve
  * @param {boolean} [args.relative = false] - Changes the meaning of `depth` to be measured from the current shallow depth rather than from the branch tip.
  * @param {Date} [args.since] - Only fetch commits created after the given date. Mutually exclusive with `depth`.
@@ -79,6 +81,8 @@ export async function fetch({
   remoteRef,
   url,
   corsProxy,
+  unshallow = false,
+  filter = null,
   depth = null,
   since = null,
   exclude = [],
@@ -110,6 +114,8 @@ export async function fetch({
       remoteRef,
       url,
       corsProxy,
+      unshallow,
+      filter,
       depth,
       since,
       exclude,

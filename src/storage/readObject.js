@@ -13,6 +13,9 @@ import { shasum } from '../utils/shasum.js'
  * @param {string} args.gitdir
  * @param {string} args.oid
  * @param {string} [args.format]
+ * @param {boolean} [args.allowMissing] - If true, return {object: null, type: null}
+ *   instead of throwing NotFoundError when the object is not found. Used by checkout
+ *   during partial clone when blobs may have been excluded by a filter (e.g. blob:limit).
  */
 export async function _readObject({
   fs,
@@ -20,6 +23,7 @@ export async function _readObject({
   gitdir,
   oid,
   format = 'content',
+  allowMissing = false,
 }) {
   // Curry the current read method so that the packfile un-deltification
   // process can acquire external ref-deltas.
@@ -48,6 +52,12 @@ export async function _readObject({
   }
   // Finally
   if (!result) {
+    if (allowMissing) {
+      // Partial clone: the object was excluded by a filter (e.g. blob:limit=xxx).
+      // Return a sentinel to enable callers (e.g. checkout) to skip the file confidently
+      // rather than throwing NotFoundError.
+      return { object: null, type: null }
+    }
     throw new NotFoundError(oid)
   }
 

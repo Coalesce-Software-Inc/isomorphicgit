@@ -13,289 +13,6 @@ var pify = _interopDefault(require('pify'));
 var cleanGitRef = _interopDefault(require('clean-git-ref'));
 var diff3Merge = _interopDefault(require('diff3'));
 
-/**
- * @typedef {Object} GitProgressEvent
- * @property {string} phase
- * @property {number} loaded
- * @property {number} total
- */
-
-/**
- * @callback ProgressCallback
- * @param {GitProgressEvent} progress
- * @returns {void | Promise<void>}
- */
-
-/**
- * @typedef {Object} GitHttpRequest
- * @property {string} url - The URL to request
- * @property {string} [method='GET'] - The HTTP method to use
- * @property {Object<string, string>} [headers={}] - Headers to include in the HTTP request
- * @property {Object} [agent] - An HTTP or HTTPS agent that manages connections for the HTTP client (Node.js only)
- * @property {AsyncIterableIterator<Uint8Array>} [body] - An async iterator of Uint8Arrays that make up the body of POST requests
- * @property {ProgressCallback} [onProgress] - Reserved for future use (emitting `GitProgressEvent`s)
- * @property {object} [signal] - Reserved for future use (canceling a request)
- */
-
-/**
- * @typedef {Object} GitHttpResponse
- * @property {string} url - The final URL that was fetched after any redirects
- * @property {string} [method] - The HTTP method that was used
- * @property {Object<string, string>} [headers] - HTTP response headers
- * @property {AsyncIterableIterator<Uint8Array>} [body] - An async iterator of Uint8Arrays that make up the body of the response
- * @property {number} statusCode - The HTTP status code
- * @property {string} statusMessage - The HTTP status message
- */
-
-/**
- * @callback HttpFetch
- * @param {GitHttpRequest} request
- * @returns {Promise<GitHttpResponse>}
- */
-
-/**
- * @typedef {Object} HttpClient
- * @property {HttpFetch} request
- */
-
-/**
- * A git commit object.
- *
- * @typedef {Object} CommitObject
- * @property {string} message Commit message
- * @property {string} tree SHA-1 object id of corresponding file tree
- * @property {string[]} parent an array of zero or more SHA-1 object ids
- * @property {Object} author
- * @property {string} author.name The author's name
- * @property {string} author.email The author's email
- * @property {number} author.timestamp UTC Unix timestamp in seconds
- * @property {number} author.timezoneOffset Timezone difference from UTC in minutes
- * @property {Object} committer
- * @property {string} committer.name The committer's name
- * @property {string} committer.email The committer's email
- * @property {number} committer.timestamp UTC Unix timestamp in seconds
- * @property {number} committer.timezoneOffset Timezone difference from UTC in minutes
- * @property {string} [gpgsig] PGP signature (if present)
- */
-
-/**
- * An entry from a git tree object. Files are called 'blobs' and directories are called 'trees'.
- *
- * @typedef {Object} TreeEntry
- * @property {string} mode the 6 digit hexadecimal mode
- * @property {string} path the name of the file or directory
- * @property {string} oid the SHA-1 object id of the blob or tree
- * @property {'commit'|'blob'|'tree'} type the type of object
- */
-
-/**
- * A git tree object. Trees represent a directory snapshot.
- *
- * @typedef {TreeEntry[]} TreeObject
- */
-
-/**
- * A git annotated tag object.
- *
- * @typedef {Object} TagObject
- * @property {string} object SHA-1 object id of object being tagged
- * @property {'blob' | 'tree' | 'commit' | 'tag'} type the type of the object being tagged
- * @property {string} tag the tag name
- * @property {Object} tagger
- * @property {string} tagger.name the tagger's name
- * @property {string} tagger.email the tagger's email
- * @property {number} tagger.timestamp UTC Unix timestamp in seconds
- * @property {number} tagger.timezoneOffset timezone difference from UTC in minutes
- * @property {string} message tag message
- * @property {string} [gpgsig] PGP signature (if present)
- */
-
-/**
- * @typedef {Object} ReadCommitResult
- * @property {string} oid - SHA-1 object id of this commit
- * @property {CommitObject} commit - the parsed commit object
- * @property {string} payload - PGP signing payload
- */
-
-/**
- * @typedef {Object} ServerRef - This object has the following schema:
- * @property {string} ref - The name of the ref
- * @property {string} oid - The SHA-1 object id the ref points to
- * @property {string} [target] - The target ref pointed to by a symbolic ref
- * @property {string} [peeled] - If the oid is the SHA-1 object id of an annotated tag, this is the SHA-1 object id that the annotated tag points to
- */
-
-/**
- * @typedef Walker
- * @property {Symbol} Symbol('GitWalkerSymbol')
- */
-
-/**
- * Normalized subset of filesystem `stat` data:
- *
- * @typedef {Object} Stat
- * @property {number} ctimeSeconds
- * @property {number} ctimeNanoseconds
- * @property {number} mtimeSeconds
- * @property {number} mtimeNanoseconds
- * @property {number} dev
- * @property {number} ino
- * @property {number} mode
- * @property {number} uid
- * @property {number} gid
- * @property {number} size
- */
-
-/**
- * The `WalkerEntry` is an interface that abstracts computing many common tree / blob stats.
- *
- * @typedef {Object} WalkerEntry
- * @property {function(): Promise<'tree'|'blob'|'special'|'commit'>} type
- * @property {function(): Promise<number>} mode
- * @property {function(): Promise<string>} oid
- * @property {function(): Promise<Uint8Array|void>} content
- * @property {function(): Promise<Stat>} stat
- */
-
-/**
- * @typedef {Object} CallbackFsClient
- * @property {function} readFile - https://nodejs.org/api/fs.html#fs_fs_readfile_path_options_callback
- * @property {function} writeFile - https://nodejs.org/api/fs.html#fs_fs_writefile_file_data_options_callback
- * @property {function} unlink - https://nodejs.org/api/fs.html#fs_fs_unlink_path_callback
- * @property {function} readdir - https://nodejs.org/api/fs.html#fs_fs_readdir_path_options_callback
- * @property {function} mkdir - https://nodejs.org/api/fs.html#fs_fs_mkdir_path_mode_callback
- * @property {function} rmdir - https://nodejs.org/api/fs.html#fs_fs_rmdir_path_callback
- * @property {function} stat - https://nodejs.org/api/fs.html#fs_fs_stat_path_options_callback
- * @property {function} lstat - https://nodejs.org/api/fs.html#fs_fs_lstat_path_options_callback
- * @property {function} [readlink] - https://nodejs.org/api/fs.html#fs_fs_readlink_path_options_callback
- * @property {function} [symlink] - https://nodejs.org/api/fs.html#fs_fs_symlink_target_path_type_callback
- * @property {function} [chmod] - https://nodejs.org/api/fs.html#fs_fs_chmod_path_mode_callback
- */
-
-/**
- * @typedef {Object} PromiseFsClient
- * @property {Object} promises
- * @property {function} promises.readFile - https://nodejs.org/api/fs.html#fs_fspromises_readfile_path_options
- * @property {function} promises.writeFile - https://nodejs.org/api/fs.html#fs_fspromises_writefile_file_data_options
- * @property {function} promises.unlink - https://nodejs.org/api/fs.html#fs_fspromises_unlink_path
- * @property {function} promises.readdir - https://nodejs.org/api/fs.html#fs_fspromises_readdir_path_options
- * @property {function} promises.mkdir - https://nodejs.org/api/fs.html#fs_fspromises_mkdir_path_options
- * @property {function} promises.rmdir - https://nodejs.org/api/fs.html#fs_fspromises_rmdir_path
- * @property {function} promises.stat - https://nodejs.org/api/fs.html#fs_fspromises_stat_path_options
- * @property {function} promises.lstat - https://nodejs.org/api/fs.html#fs_fspromises_lstat_path_options
- * @property {function} [promises.readlink] - https://nodejs.org/api/fs.html#fs_fspromises_readlink_path_options
- * @property {function} [promises.symlink] - https://nodejs.org/api/fs.html#fs_fspromises_symlink_target_path_type
- * @property {function} [promises.chmod] - https://nodejs.org/api/fs.html#fs_fspromises_chmod_path_mode
- */
-
-/**
- * @typedef {CallbackFsClient | PromiseFsClient} FsClient
- */
-
-/**
- * @callback MessageCallback
- * @param {string} message
- * @returns {void | Promise<void>}
- */
-
-/**
- * @typedef {Object} GitAuth
- * @property {string} [username]
- * @property {string} [password]
- * @property {Object<string, string>} [headers]
- * @property {boolean} [cancel] Tells git to throw a `UserCanceledError` (instead of an `HttpError`).
- */
-
-/**
- * @callback AuthCallback
- * @param {string} url
- * @param {GitAuth} auth Might have some values if the URL itself originally contained a username or password.
- * @returns {GitAuth | void | Promise<GitAuth | void>}
- */
-
-/**
- * @callback AuthFailureCallback
- * @param {string} url
- * @param {GitAuth} auth The credentials that failed
- * @returns {GitAuth | void | Promise<GitAuth | void>}
- */
-
-/**
- * @callback AuthSuccessCallback
- * @param {string} url
- * @param {GitAuth} auth
- * @returns {void | Promise<void>}
- */
-
-/**
- * @typedef {Object} SignParams
- * @property {string} payload - a plaintext message
- * @property {string} secretKey - an 'ASCII armor' encoded PGP key (technically can actually contain _multiple_ keys)
- */
-
-/**
- * @callback SignCallback
- * @param {SignParams} args
- * @return {{signature: string} | Promise<{signature: string}>} - an 'ASCII armor' encoded "detached" signature
- */
-
-/**
- * @callback WalkerMap
- * @param {string} filename
- * @param {WalkerEntry[]} entries
- * @returns {Promise<any>}
- */
-
-/**
- * @callback WalkerReduce
- * @param {any} parent
- * @param {any[]} children
- * @returns {Promise<any>}
- */
-
-/**
- * @callback WalkerIterateCallback
- * @param {WalkerEntry[]} entries
- * @returns {Promise<any[]>}
- */
-
-/**
- * @callback WalkerIterate
- * @param {WalkerIterateCallback} walk
- * @param {IterableIterator<WalkerEntry[]>} children
- * @returns {Promise<any[]>}
- */
-
-/**
- * @typedef {Object} RefUpdateStatus
- * @property {boolean} ok
- * @property {string} error
- */
-
-/**
- * @typedef {Object} PushResult
- * @property {boolean} ok
- * @property {?string} error
- * @property {Object<string, RefUpdateStatus>} refs
- * @property {Object<string, string>} [headers]
- */
-
-/**
- * @typedef {0|1} HeadStatus
- */
-
-/**
- * @typedef {0|1|2} WorkdirStatus
- */
-
-/**
- * @typedef {0|1|2|3} StageStatus
- */
-
-/**
- * @typedef {[string, HeadStatus, WorkdirStatus, StageStatus]} StatusRow
- */
-
 class BaseError extends Error {
   constructor(message) {
     super(message);
@@ -1108,8 +825,6 @@ function STAGE() {
   return o
 }
 
-// @ts-check
-
 class NotFoundError extends BaseError {
   /**
    * @param {string} what
@@ -1489,12 +1204,12 @@ class GitConfig {
       const extractedSection = extractSectionLine(trimmedLine);
       const isSection = extractedSection != null;
       if (isSection) {
-        ;[section, subsection] = extractedSection;
+[section, subsection] = extractedSection;
       } else {
         const extractedVariable = extractVariableLine(trimmedLine);
         const isVariable = extractedVariable != null;
         if (isVariable) {
-          ;[name, value] = extractedVariable;
+[name, value] = extractedVariable;
         }
       }
 
@@ -2477,31 +2192,8 @@ async function parseHeader(reader) {
 
 /* eslint-env node, browser */
 
-let supportsDecompressionStream = false;
-
 async function inflate(buffer) {
-  if (supportsDecompressionStream === null) {
-    supportsDecompressionStream = testDecompressionStream();
-  }
-  return supportsDecompressionStream
-    ? browserInflate(buffer)
-    : pako.inflate(buffer)
-}
-
-async function browserInflate(buffer) {
-  const ds = new DecompressionStream('deflate');
-  const d = new Blob([buffer]).stream().pipeThrough(ds);
-  return new Uint8Array(await new Response(d).arrayBuffer())
-}
-
-function testDecompressionStream() {
-  try {
-    const ds = new DecompressionStream('deflate');
-    if (ds) return true
-  } catch (_) {
-    // no bother
-  }
-  return false
+  return  pako.inflate(buffer)
 }
 
 function decodeVarInt(reader) {
@@ -2923,6 +2615,9 @@ async function readObjectPacked({
  * @param {string} args.gitdir
  * @param {string} args.oid
  * @param {string} [args.format]
+ * @param {boolean} [args.allowMissing] - If true, return {object: null, type: null}
+ *   instead of throwing NotFoundError when the object is not found. Used by checkout
+ *   during partial clone when blobs may have been excluded by a filter (e.g. blob:limit).
  */
 async function _readObject({
   fs,
@@ -2930,6 +2625,7 @@ async function _readObject({
   gitdir,
   oid,
   format = 'content',
+  allowMissing = false,
 }) {
   // Curry the current read method so that the packfile un-deltification
   // process can acquire external ref-deltas.
@@ -2958,6 +2654,12 @@ async function _readObject({
   }
   // Finally
   if (!result) {
+    if (allowMissing) {
+      // Partial clone: the object was excluded by a filter (e.g. blob:limit=xxx).
+      // Return a sentinel to enable callers (e.g. checkout) to skip the file confidently
+      // rather than throwing NotFoundError.
+      return { object: null, type: null }
+    }
     throw new NotFoundError(oid)
   }
 
@@ -3871,8 +3573,6 @@ function TREE({ ref = 'HEAD' }) {
   return o
 }
 
-// @ts-check
-
 class GitWalkerFs {
   constructor({ fs, dir, gitdir, cache }) {
     this.fs = fs;
@@ -4037,8 +3737,6 @@ function WORKDIR() {
   Object.freeze(o);
   return o
 }
-
-// @ts-check
 
 // I'm putting this in a Manager because I reckon it could benefit
 // from a LOT of cacheing.
@@ -5665,14 +5363,14 @@ const worthWalking = (filepath, root) => {
   }
 };
 
+// @ts-check
+
 /**
  * @param {number} startMs
  */
 const getElapsedSeconds = (startMs) => {
   return +((performance.now() - startMs) / 1000).toFixed(3);
-}
-
-// @ts-check
+};
 
 /**
  * @param {object} args
@@ -5689,8 +5387,9 @@ const getElapsedSeconds = (startMs) => {
  * @param {boolean} [args.dryRun]
  * @param {boolean} [args.force]
  * @param {boolean} [args.track]
+ Works with any git server.
  *
- * @returns {Promise<object>} Resolves successfully when filesystem operations are complete, returning a dictionary composed of performance marks in seconds
+ * @returns {Promise<object>} Resolves successfully when filesystem operations are complete
  *
  */
 async function _checkout({
@@ -5842,9 +5541,9 @@ async function _checkout({
             ([method]) => method === 'delete' || method === 'delete-index'
           )
           .map(async function([method, fullpath]) {
-            if (!fs._unlinkMany && method === 'delete') {	
-              const filepath = `${dir}/${fullpath}`;	
-              await fs.rm(filepath);	
+            if (!fs._unlinkMany && method === 'delete') {
+              const filepath = `${dir}/${fullpath}`;
+              await fs.rm(filepath);
             }
             index.delete({ filepath: fullpath });
             if (onProgress) {
@@ -5913,8 +5612,12 @@ async function _checkout({
 
     const startWrites = performance.now();
 
+    // Write phase: materialize blobs to working directory.
+    // Two code paths: bulk write (when fs supports _writeFiles/_unlinkMany) and standard write.
+    // With partial clone (filter), some blobs may be missing — those are skipped and tracked
+    // in skippedFiles so we can report them and avoid lstat/index.insert on non-existent files.
+    const skippedFiles = new Set();
     await GitIndexManager.acquire({ fs, gitdir, cache }, async function(index) {
-      //only execute this enhanced performance methodology if our fs has the required internal functions, otherwise run the standard path
       if (fs._writeFiles && fs._unlinkMany) {
         const writeOps = ops.filter(([method]) => method === "create" || method === "update");
         const deletes = [];
@@ -5926,7 +5629,21 @@ async function _checkout({
           if (chmod) {
             deletes.push(filepath);
           }
-          const { object } = await _readObject({ fs, cache, gitdir, oid });
+          const { object, type } = await _readObject({ fs, cache, gitdir, oid, allowMissing: true });
+          // Partial clone: object may be missing if excluded by a server-side filter
+          // (e.g. blob:limit=xxx). allowMissing lets _readObject return null
+          // instead of throwing NotFoundError, so we can skip this file gracefully.
+          if (object === null && type === null) {
+            skippedFiles.add(fullpath);
+            if (onProgress) {
+              await onProgress({
+                phase: 'Skipping filtered object',
+                loaded: ++count,
+                total,
+              });
+            }
+            continue;
+          }
           const write = [filepath, object];
           if (mode === 0o100644) {
             regularWrites.push(write);
@@ -5940,12 +5657,12 @@ async function _checkout({
             )
           }
         }
-  
+
         await fs.rmMany(deletes);
         if (onProgress) {
           await onProgress({ loaded: 0, total: 0, phase: "deleted files for chmod reasons"});
         }
-  
+
         await fs.writeFiles(regularWrites, {});
         if (onProgress) {
           await onProgress({ loaded: 0, total: regularWrites.length, phase: "wrote regular files"});
@@ -5961,6 +5678,9 @@ async function _checkout({
 
       }
 
+      // Standard write path (also handles index updates for the bulk write path above).
+      // When fs._writeFiles is available, only index updates and lstat run here. 
+      // The actual file writes were already handled in the bulk path above.
       await Promise.all(
         ops
           .filter(
@@ -5974,7 +5694,21 @@ async function _checkout({
             const filepath = `${dir}/${fullpath}`;
             try {
               if (!fs._writeFiles && method !== 'create-index' && method !== 'mkdir-index') {
-                const { object } = await _readObject({ fs, cache, gitdir, oid });
+                const { object, type } = await _readObject({ fs, cache, gitdir, oid, allowMissing: true });
+                // Partial clone: object may be missing if excluded by a server-side filter
+                // (e.g. blob:limit=xxx). allowMissing lets _readObject return null
+                // instead of throwing NotFoundError, so we can skip this file gracefully.
+                if (object === null && type === null) {
+                  skippedFiles.add(fullpath);
+                  if (onProgress) {
+                    await onProgress({
+                      phase: 'Skipping filtered object',
+                      loaded: ++count,
+                      total,
+                    });
+                  }
+                  return
+                }
                 if (chmod) {
                   // Note: the mode option of fs.write only works when creating files,
                   // not updating them. Since the `fs` plugin doesn't expose `chmod` this
@@ -5995,6 +5729,14 @@ async function _checkout({
                     `Invalid mode 0o${mode.toString(8)} detected in blob ${oid}`
                   )
                 }
+              }
+              // When the bulk write path (fs._writeFiles) skipped a filtered-out blob,
+              // but this Promise.all block still runs for the same op. Guard against lstat
+              // on the non-existent file and skip the index insert for filtered-out files
+              // are intentionally omitted from the git index since we have no on-demand
+              // fetch mechanism and don't want status to report them as deleted.
+              if (skippedFiles.has(fullpath)) {
+                return
               }
               const stats = await fs.lstat(filepath);
               // We can't trust the executable bit returned by lstat on Windows,
@@ -6050,28 +5792,6 @@ async function _checkout({
 
   perfSegments.total = getElapsedSeconds(startTotal);
   return perfSegments;
-}
-
-async function readAllFiles({
-  fs,
-  gitdir,
-  ref,
-}) {
-  const cache = {};
-  const treeResult = await _readTree({ fs, gitdir, oid: ref, cache });
-  return _walk({ fs, gitdir, cache, trees: [TREE({ref: treeResult.oid})], map: async (fileName, entries) => {
-    const fileReadResult = { filePath: fileName, fileData: ""};
-        //if there's content, use it, otherwise return an "empty" FileReadResult
-        if (entries[0]) {
-          const content = await entries[0].content();
-          if (content && typeof content === "object") {
-            fileReadResult.fileData = content;
-          } else {
-            fileReadResult.type = "Directory";
-          }
-        }
-        return fileReadResult;
-  }});
 }
 
 
@@ -7411,28 +7131,113 @@ async function parseUploadPackResponse(stream) {
   })
 }
 
+/**
+ * Builds a git-upload-pack request per the Git pack protocol v1.
+ *
+ * The upload-pack request is how a git client tells the server which objects
+ * it needs. The request is a sequence of pkt-lines with this structure:
+ *
+ *   want <oid> <capabilities>\n   — objects the client wants (branch tips, tags)
+ *   want <oid>\n                  — additional wants (no capabilities after first line)
+ *   shallow <oid>\n               — shallow boundaries (see below)
+ *   filter <spec>\n               — partial clone filter (see below)
+ *   deepen <N>\n                  — depth limit / unshallow request (see below)
+ *   deepen-since <timestamp>\n    — date-based depth limit
+ *   deepen-not <ref>\n            — exclude commits reachable from ref
+ *   flush-pkt                     — separator
+ *   have <oid>\n                  — objects the client already has
+ *   done\n                        — end of negotiation
+ *
+ * ## Shallow Clones & Boundaries
+ *
+ * A shallow clone (e.g. `depth: 3`) only fetches the last N commits. The
+ * oldest commits in a shallow clone are called "shallow boundaries" — they
+ * have parent pointers in their metadata, but those parents don't exist
+ * locally. Git records these boundary OIDs in `.git/shallow`.
+ *
+ * Example with depth 3 on a branch A→B→C→D→E (E = HEAD):
+ *
+ *   Full history:    A → B → C → D → E
+ *   Shallow clone:             C → D → E
+ *                               ^
+ *                          shallow boundary (recorded in .git/shallow)
+ *
+ * On subsequent fetches, the client MUST send `shallow <oid>` lines so the
+ * server knows where the client's history ends. Without these, the server
+ * assumes the client has full history and may send delta-compressed objects
+ * referencing parents the client doesn't have.
+ *
+ * ## Unshallowing (Converting Shallow → Full Clone)
+ *
+ * To retrieve the full history that was previously excluded:
+ *
+ *   1. Client sends `shallow <oid>` lines as usual (tells server the boundaries)
+ *   2. Client sends `deepen 2147483647` (INT32_MAX — effectively "give me everything")
+ *   3. Server sends all missing history plus `unshallow <oid>` responses
+ *   4. Client removes those OIDs from `.git/shallow` (via GitShallowManager)
+ *
+ * `unshallow` and `depth` are mutually exclusive — if you're requesting full
+ * history, a specific depth limit would be contradictory.
+ *
+ * ## Partial Clone Filters
+ *
+ * The `filter` parameter (e.g. `blob:limit=2097152`) tells the server to
+ * exclude certain objects from the packfile. The server omits matching objects
+ * entirely — they won't exist in the local object store. This is independent
+ * of shallow/depth and can be combined with either.
+ *
+ * @param {object} args
+ * @param {string[]} args.capabilities - Protocol capabilities to advertise
+ * @param {string[]} args.wants - OIDs of objects the client wants
+ * @param {string[]} args.haves - OIDs of objects the client already has
+ * @param {string[]} args.shallows - OIDs of current shallow boundary commits
+ * @param {boolean} args.unshallow - If true, request full history (deepen INT32_MAX)
+ * @param {string|null} args.filter - Partial clone filter spec (e.g. 'blob:limit=2097152')
+ * @param {number|null} args.depth - Shallow clone depth limit
+ * @param {Date|null} args.since - Date-based depth limit
+ * @param {string[]} args.exclude - Refs whose reachable commits should be excluded
+ * @returns {Array} Array of pkt-line encoded buffers
+ */
 function writeUploadPackRequest({
   capabilities = [],
   wants = [],
   haves = [],
   shallows = [],
+  unshallow = false,
+  filter = null,
   depth = null,
   since = null,
   exclude = [],
 }) {
   const packstream = [];
   wants = [...new Set(wants)]; // remove duplicates
+
+  // First want line carries the capability advertisement
   let firstLineCapabilities = ` ${capabilities.join(' ')}`;
   for (const oid of wants) {
     packstream.push(GitPktLine.encode(`want ${oid}${firstLineCapabilities}\n`));
     firstLineCapabilities = '';
   }
+
+  // Always send shallow boundaries so the server knows where the client's
+  // commit history ends. Required for both normal shallow fetches and unshallow.
   for (const oid of shallows) {
     packstream.push(GitPktLine.encode(`shallow ${oid}\n`));
   }
-  if (depth !== null) {
+
+  // Partial clone: tell the server to exclude objects matching the filter spec
+  if (filter !== null) {
+    packstream.push(GitPktLine.encode(`filter ${filter}\n`));
+  }
+
+  // Depth negotiation: unshallow requests full history (INT32_MAX depth),
+  // otherwise use the explicit depth if provided. These are mutually exclusive.
+  if (unshallow) {
+    packstream.push(GitPktLine.encode(`deepen 2147483647\n`));
+  } else if (depth !== null) {
     packstream.push(GitPktLine.encode(`deepen ${depth}\n`));
   }
+
   if (since !== null) {
     packstream.push(
       GitPktLine.encode(`deepen-since ${Math.floor(since.valueOf() / 1000)}\n`)
@@ -7441,7 +7246,11 @@ function writeUploadPackRequest({
   for (const oid of exclude) {
     packstream.push(GitPktLine.encode(`deepen-not ${oid}\n`));
   }
+
+  // Flush separates the want/shallow/deepen section from the have section
   packstream.push(GitPktLine.flush());
+
+  // Tell the server which objects we already have (for negotiation)
   for (const oid of haves) {
     packstream.push(GitPktLine.encode(`have ${oid}\n`));
   }
@@ -7480,6 +7289,8 @@ function writeUploadPackRequest({
  * @param {string} [args.remote]
  * @param {boolean} [args.singleBranch = false]
  * @param {boolean} [args.tags = false]
+ * @param {boolean} [args.unshallow = false]
+ * @param {string} [args.filter]
  * @param {number} [args.depth]
  * @param {Date} [args.since]
  * @param {string[]} [args.exclude = []]
@@ -7506,6 +7317,8 @@ async function _fetch({
   remote: _remote,
   url: _url,
   corsProxy,
+  unshallow = false,
+  filter = null,
   depth = null,
   since = null,
   exclude = [],
@@ -7560,6 +7373,9 @@ async function _fetch({
     }
   }
   // Check that the remote supports the requested features
+  if (filter !== null && !remoteHTTP.capabilities.has('filter')) {
+    throw new RemoteCapabilityError('filter', 'filter')
+  }
   if (depth !== null && !remoteHTTP.capabilities.has('shallow')) {
     throw new RemoteCapabilityError('shallow', 'depth')
   }
@@ -7605,6 +7421,7 @@ async function _fetch({
       `agent=${pkg.agent}`,
     ]
   );
+  if (filter) capabilities.push('filter');
   if (relative) capabilities.push('deepen-relative');
   // Start figuring out which oids from the remote we want to request
   const wants = singleBranch ? [oid] : remoteRefs.values();
@@ -7635,6 +7452,8 @@ async function _fetch({
     wants,
     haves,
     shallows,
+    unshallow,
+    filter,
     depth,
     since,
     exclude,
@@ -7656,10 +7475,14 @@ async function _fetch({
   if (raw.headers) {
     response.headers = raw.headers;
   }
-  // Apply all the 'shallow' and 'unshallow' commands
+  // Apply all the 'shallow' and 'unshallow' commands.
+  // Note on partial clone: this loop processes commit OIDs (not blobs), and commit
+  // objects are never excluded by blob:limit filters. The try/catch below is a
+  // pre-existing defensive pattern — if readObject fails for any reason (e.g. missing
+  // test fixtures, corrupt pack), we conservatively mark the commit as a shallow
+  // boundary rather than crashing the fetch.
   for (const oid of response.shallows) {
     if (!oids.has(oid)) {
-      // this is in a try/catch mostly because my old test fixtures are missing objects
       try {
         // server says it's shallow, but do we have the parents?
         const { object } = await _readObject({ fs, cache, gitdir, oid });
@@ -7874,6 +7697,7 @@ async function _init({
  * @param {boolean} args.noCheckout
  * @param {boolean} args.noTags
  * @param {string} args.remote
+ * @param {string} args.filter
  * @param {number} args.depth
  * @param {Date} args.since
  * @param {string[]} args.exclude
@@ -7898,6 +7722,7 @@ async function _clone({
   corsProxy,
   ref,
   remote,
+  filter,
   depth,
   since,
   exclude,
@@ -7928,6 +7753,7 @@ async function _clone({
       ref,
       remote,
       corsProxy,
+      filter,
       depth,
       since,
       exclude,
@@ -7983,6 +7809,7 @@ async function _clone({
  * @param {boolean} [args.noCheckout = false] - If true, clone will only fetch the repo, not check out a branch. Skipping checkout can save a lot of time normally spent writing files to disk.
  * @param {boolean} [args.noTags = false] - By default clone will fetch all tags. `noTags` disables that behavior.
  * @param {string} [args.remote = 'origin'] - What to name the remote that is created.
+ * @param {string} [args.filter] - Partial clone filter spec sent to the server during fetch. Limits which objects the server includes in the packfile. Common values: `'blob:limit=2097152'` (exclude blobs larger than 2MB), `'blob:none'` (exclude all blobs), `'tree:0'` (exclude all trees). Values are in bytes by default; `k`, `m`, and `g` suffixes are also supported (e.g. `'blob:limit=2m'`). Requires server support for the `filter` capability. Filtered-out objects will be skipped during checkout.
  * @param {number} [args.depth] - Integer. Determines how much of the git repository's history to retrieve
  * @param {Date} [args.since] - Only fetch commits created after the given date. Mutually exclusive with `depth`.
  * @param {string[]} [args.exclude = []] - A list of branches or tags. Instructs the remote server not to send us any commits reachable from these refs.
@@ -8019,6 +7846,7 @@ async function clone({
   corsProxy = undefined,
   ref = undefined,
   remote = 'origin',
+  filter = undefined,
   depth = undefined,
   since = undefined,
   exclude = [],
@@ -8053,6 +7881,7 @@ async function clone({
       corsProxy,
       ref,
       remote,
+      filter,
       depth,
       since,
       exclude,
@@ -9283,6 +9112,7 @@ async function _merge({
  * @param {string} [args.remoteRef]
  * @param {string} [args.corsProxy]
  * @param {boolean} args.singleBranch
+ * @param {string|null} [args.filter]
  * @param {boolean} args.fastForwardOnly
  * @param {Object<string, string>} [args.headers]
  * @param {Object} args.author
@@ -9318,6 +9148,7 @@ async function _pull({
   fastForwardOnly,
   corsProxy,
   singleBranch,
+  filter,
   headers,
   author,
   committer,
@@ -9350,6 +9181,7 @@ async function _pull({
       remote,
       remoteRef,
       singleBranch,
+      filter,
       headers,
     });
     // Merge the remote tracking branch into the local one.
@@ -9511,6 +9343,8 @@ async function fastForward({
  * @param {string} [args.ref] - Which branch to fetch if `singleBranch` is true. By default this is the current branch or the remote's default branch.
  * @param {string} [args.remoteRef] - The name of the branch on the remote to fetch if `singleBranch` is true. By default this is the configured remote tracking branch.
  * @param {boolean} [args.tags = false] - Also fetch tags
+ * @param {boolean} [args.unshallow = false] - Convert a shallow clone to a full clone by requesting complete commit history from the server. Sends `deepen 2147483647` in the upload-pack request. Mutually exclusive with `depth`.
+ * @param {string} [args.filter] - Partial clone filter spec sent to the server. Limits which objects the server includes in the packfile. Common values: `'blob:limit=2097152'` (exclude blobs larger than 2MB), `'blob:none'` (exclude all blobs), `'tree:0'` (exclude all trees). Values are in bytes by default; `k`, `m`, and `g` suffixes are also supported (e.g. `'blob:limit=2m'`). Requires server support for the `filter` capability. Filtered-out objects will be skipped during checkout.
  * @param {number} [args.depth] - Integer. Determines how much of the git repository's history to retrieve
  * @param {boolean} [args.relative = false] - Changes the meaning of `depth` to be measured from the current shallow depth rather than from the branch tip.
  * @param {Date} [args.since] - Only fetch commits created after the given date. Mutually exclusive with `depth`.
@@ -9554,6 +9388,8 @@ async function fetch({
   remoteRef,
   url,
   corsProxy,
+  unshallow = false,
+  filter = null,
   depth = null,
   since = null,
   exclude = [],
@@ -9585,6 +9421,8 @@ async function fetch({
       remoteRef,
       url,
       corsProxy,
+      unshallow,
+      filter,
       depth,
       since,
       exclude,
@@ -11622,6 +11460,7 @@ async function packObjects({
  * @param {string} [args.remoteRef] - (Added in 1.1.0) The name of the branch on the remote to fetch. By default this is the configured remote tracking branch.
  * @param {string} [args.corsProxy] - Optional [CORS proxy](https://www.npmjs.com/%40isomorphic-git/cors-proxy). Overrides value in repo config.
  * @param {boolean} [args.singleBranch = false] - Instead of the default behavior of fetching all the branches, only fetch a single branch.
+ * @param {string} [args.filter] - Partial clone filter spec sent to the server. Limits which objects the server includes in the packfile. Common values: `'blob:limit=2097152'` (exclude blobs larger than 2MB), `'blob:none'` (exclude all blobs), `'tree:0'` (exclude all trees). Values are in bytes by default; `k`, `m`, and `g` suffixes are also supported (e.g. `'blob:limit=2m'`). Requires server support for the `filter` capability. Filtered-out objects will be skipped during checkout.
  * @param {boolean} [args.fastForwardOnly = false] - Only perform simple fast-forward merges. (Don't create merge commits.)
  * @param {Object<string, string>} [args.headers] - Additional headers to include in HTTP requests, similar to git's `extraHeader` config
  * @param {Object} [args.author] - The details about the author.
@@ -11667,6 +11506,7 @@ async function pull({
   fastForwardOnly = false,
   corsProxy,
   singleBranch,
+  filter,
   headers = {},
   author: _author,
   committer: _committer,
@@ -11708,6 +11548,7 @@ async function pull({
       fastForwardOnly,
       corsProxy,
       singleBranch,
+      filter,
       headers,
       author,
       committer,

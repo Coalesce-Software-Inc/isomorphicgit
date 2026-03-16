@@ -1046,7 +1046,7 @@ export function checkout({ fs, onProgress, dir, gitdir, remote, ref: _ref, filep
  * console.log('done')
  *
  */
-export function clone({ fs, http, onProgress, onMessage, onAuth, onAuthSuccess, onAuthFailure, dir, gitdir, url, corsProxy, ref, remote, depth, since, exclude, relative, singleBranch, noCheckout, noTags, headers, cache, }: {
+export function clone({ fs, http, onProgress, onMessage, onAuth, onAuthSuccess, onAuthFailure, dir, gitdir, url, corsProxy, ref, remote, filter, depth, since, exclude, relative, singleBranch, noCheckout, noTags, headers, cache, }: {
     fs: CallbackFsClient | PromiseFsClient;
     http: HttpClient;
     onProgress?: ProgressCallback;
@@ -1063,6 +1063,7 @@ export function clone({ fs, http, onProgress, onMessage, onAuth, onAuthSuccess, 
     noCheckout?: boolean;
     noTags?: boolean;
     remote?: string;
+    filter?: string;
     depth?: number;
     since?: Date;
     exclude?: string[];
@@ -1418,7 +1419,7 @@ export function fastForward({ fs, http, onProgress, onMessage, onAuth, onAuthSuc
  * console.log(result)
  *
  */
-export function fetch({ fs, http, onProgress, onMessage, onAuth, onAuthSuccess, onAuthFailure, dir, gitdir, ref, remote, remoteRef, url, corsProxy, depth, since, exclude, relative, tags, singleBranch, headers, prune, pruneTags, cache, }: {
+export function fetch({ fs, http, onProgress, onMessage, onAuth, onAuthSuccess, onAuthFailure, dir, gitdir, ref, remote, remoteRef, url, corsProxy, filter, depth, since, exclude, relative, tags, singleBranch, headers, prune, pruneTags, cache, }: {
     fs: CallbackFsClient | PromiseFsClient;
     http: HttpClient;
     onProgress?: ProgressCallback;
@@ -1434,6 +1435,7 @@ export function fetch({ fs, http, onProgress, onMessage, onAuth, onAuthSuccess, 
     ref?: string;
     remoteRef?: string;
     tags?: boolean;
+    filter?: string;
     depth?: number;
     relative?: boolean;
     since?: Date;
@@ -2246,7 +2248,7 @@ export function packObjects({ fs, dir, gitdir, oids, write, cache, }: {
  * console.log('done')
  *
  */
-export function pull({ fs: _fs, http, onProgress, onMessage, onAuth, onAuthSuccess, onAuthFailure, dir, gitdir, ref, url, remote, remoteRef, fastForwardOnly, corsProxy, singleBranch, headers, author: _author, committer: _committer, signingKey, cache, }: {
+export function pull({ fs: _fs, http, onProgress, onMessage, onAuth, onAuthSuccess, onAuthFailure, dir, gitdir, ref, url, remote, remoteRef, fastForwardOnly, corsProxy, singleBranch, filter, headers, author: _author, committer: _committer, signingKey, cache, }: {
     fs: CallbackFsClient | PromiseFsClient;
     http: HttpClient;
     onProgress?: ProgressCallback;
@@ -2262,6 +2264,7 @@ export function pull({ fs: _fs, http, onProgress, onMessage, onAuth, onAuthSucce
     remoteRef?: string;
     corsProxy?: string;
     singleBranch?: boolean;
+    filter?: string;
     fastForwardOnly?: boolean;
     headers?: {
         [x: string]: string;

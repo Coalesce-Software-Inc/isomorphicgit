@@ -1,5 +1,6 @@
 /* eslint-env node, browser, jasmine */
 const { Errors, readObject } = require('isomorphic-git')
+const { _readObject } = require('isomorphic-git/internal-apis')
 
 const { makeFixture } = require('./__helpers__/FixtureFS.js')
 
@@ -12,6 +13,38 @@ describe('readObject', () => {
     try {
       await readObject({
         fs,
+        gitdir,
+        oid: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      })
+    } catch (err) {
+      error = err
+    }
+    expect(error).not.toBeNull()
+    expect(error instanceof Errors.NotFoundError).toBe(true)
+  })
+  it('test missing with allowMissing returns null', async () => {
+    // Setup
+    const { fs, gitdir } = await makeFixture('test-readObject')
+    // _readObject with allowMissing: true should return nulls instead of throwing
+    const result = await _readObject({
+      fs,
+      cache: {},
+      gitdir,
+      oid: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      allowMissing: true,
+    })
+    expect(result.object).toBeNull()
+    expect(result.type).toBeNull()
+  })
+  it('test missing without allowMissing still throws', async () => {
+    // Setup
+    const { fs, gitdir } = await makeFixture('test-readObject')
+    // _readObject default behavior should still throw NotFoundError
+    let error = null
+    try {
+      await _readObject({
+        fs,
+        cache: {},
         gitdir,
         oid: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       })

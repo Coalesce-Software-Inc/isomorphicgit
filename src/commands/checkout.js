@@ -39,6 +39,7 @@ const getElapsedSeconds = (startMs) => {
  * @param {boolean} [args.dryRun]
  * @param {boolean} [args.force]
  * @param {boolean} [args.track]
+ Works with any git server.
  *
  * @returns {Promise<object>} Resolves successfully when filesystem operations are complete
  *
@@ -192,9 +193,9 @@ export async function _checkout({
             ([method]) => method === 'delete' || method === 'delete-index'
           )
           .map(async function([method, fullpath]) {
-            if (!fs._unlinkMany && method === 'delete') {	
-              const filepath = `${dir}/${fullpath}`	
-              await fs.rm(filepath)	
+            if (!fs._unlinkMany && method === 'delete') {
+              const filepath = `${dir}/${fullpath}`
+              await fs.rm(filepath)
             }
             index.delete({ filepath: fullpath })
             if (onProgress) {
@@ -263,8 +264,12 @@ export async function _checkout({
 
     const startWrites = performance.now();
 
+    // Write phase: materialize blobs to working directory.
+    // Two code paths: bulk write (when fs supports _writeFiles/_unlinkMany) and standard write.
+    // With partial clone (filter), some blobs may be missing — those are skipped and tracked
+    // in skippedFiles so we can report them and avoid lstat/index.insert on non-existent files.
+    const skippedFiles = new Set()
     await GitIndexManager.acquire({ fs, gitdir, cache }, async function(index) {
-      //only execute this enhanced performance methodology if our fs has the required internal functions, otherwise run the standard path
       if (fs._writeFiles && fs._unlinkMany) {
         const writeOps = ops.filter(([method]) => method === "create" || method === "update");
         const deletes = [];
@@ -276,7 +281,21 @@ export async function _checkout({
           if (chmod) {
             deletes.push(filepath);
           }
-          const { object } = await readObject({ fs, cache, gitdir, oid });
+          const { object, type } = await readObject({ fs, cache, gitdir, oid, allowMissing: true });
+          // Partial clone: object may be missing if excluded by a server-side filter
+          // (e.g. blob:limit=xxx). allowMissing lets _readObject return null
+          // instead of throwing NotFoundError, so we can skip this file gracefully.
+          if (object === null && type === null) {
+            skippedFiles.add(fullpath)
+            if (onProgress) {
+              await onProgress({
+                phase: 'Skipping filtered object',
+                loaded: ++count,
+                total,
+              })
+            }
+            continue;
+          }
           const write = [filepath, object];
           if (mode === 0o100644) {
             regularWrites.push(write)
@@ -290,12 +309,12 @@ export async function _checkout({
             )
           }
         }
-  
+
         await fs.rmMany(deletes);
         if (onProgress) {
           await onProgress({ loaded: 0, total: 0, phase: "deleted files for chmod reasons"})
         }
-  
+
         await fs.writeFiles(regularWrites, {});
         if (onProgress) {
           await onProgress({ loaded: 0, total: regularWrites.length, phase: "wrote regular files"})
@@ -311,6 +330,9 @@ export async function _checkout({
 
       }
 
+      // Standard write path (also handles index updates for the bulk write path above).
+      // When fs._writeFiles is available, only index updates and lstat run here. 
+      // The actual file writes were already handled in the bulk path above.
       await Promise.all(
         ops
           .filter(
@@ -324,7 +346,21 @@ export async function _checkout({
             const filepath = `${dir}/${fullpath}`
             try {
               if (!fs._writeFiles && method !== 'create-index' && method !== 'mkdir-index') {
-                const { object } = await readObject({ fs, cache, gitdir, oid })
+                const { object, type } = await readObject({ fs, cache, gitdir, oid, allowMissing: true })
+                // Partial clone: object may be missing if excluded by a server-side filter
+                // (e.g. blob:limit=xxx). allowMissing lets _readObject return null
+                // instead of throwing NotFoundError, so we can skip this file gracefully.
+                if (object === null && type === null) {
+                  skippedFiles.add(fullpath)
+                  if (onProgress) {
+                    await onProgress({
+                      phase: 'Skipping filtered object',
+                      loaded: ++count,
+                      total,
+                    })
+                  }
+                  return
+                }
                 if (chmod) {
                   // Note: the mode option of fs.write only works when creating files,
                   // not updating them. Since the `fs` plugin doesn't expose `chmod` this
@@ -345,6 +381,14 @@ export async function _checkout({
                     `Invalid mode 0o${mode.toString(8)} detected in blob ${oid}`
                   )
                 }
+              }
+              // When the bulk write path (fs._writeFiles) skipped a filtered-out blob,
+              // but this Promise.all block still runs for the same op. Guard against lstat
+              // on the non-existent file and skip the index insert for filtered-out files
+              // are intentionally omitted from the git index since we have no on-demand
+              // fetch mechanism and don't want status to report them as deleted.
+              if (skippedFiles.has(fullpath)) {
+                return
               }
               const stats = await fs.lstat(filepath)
               // We can't trust the executable bit returned by lstat on Windows,

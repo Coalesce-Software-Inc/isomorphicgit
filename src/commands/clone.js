@@ -26,6 +26,7 @@ import { GitConfigManager } from '../managers/GitConfigManager.js'
  * @param {boolean} args.noCheckout
  * @param {boolean} args.noTags
  * @param {string} args.remote
+ * @param {string} args.filter
  * @param {number} args.depth
  * @param {Date} args.since
  * @param {string[]} args.exclude
@@ -50,6 +51,7 @@ export async function _clone({
   corsProxy,
   ref,
   remote,
+  filter,
   depth,
   since,
   exclude,
@@ -80,6 +82,7 @@ export async function _clone({
       ref,
       remote,
       corsProxy,
+      filter,
       depth,
       since,
       exclude,
