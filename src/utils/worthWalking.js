@@ -1,4 +1,5 @@
 export const worthWalking = (filepath, root) => {
+  console.log("WORTH_WALKING:", {filepath}, {root});
   if (filepath === '.' || root == null || root.length === 0 || root === '.') {
     return true
   }

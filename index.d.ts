@@ -956,7 +956,7 @@ export function branch({ fs, dir, gitdir, ref, checkout, }: {
  * @param {boolean} [args.track = true] - If false, will not set the remote branch tracking information. Defaults to true.
  * @param {object} [args.cache] - a [cache](cache.md) object
  *
- * @returns {Promise<object>} Resolves successfully when filesystem operations are complete, returning a dictionary composed of performance marks in seconds
+ * @returns {Promise<Object>} Resolves successfully when filesystem operations are complete
  *
  * @example
  * // switch to the main branch
@@ -1003,7 +1003,7 @@ export function checkout({ fs, onProgress, dir, gitdir, remote, ref: _ref, filep
     force?: boolean;
     track?: boolean;
     cache?: any;
-}): Promise<object>;
+}): Promise<any>;
 /**
  * Clone a repository
  *
@@ -1024,6 +1024,7 @@ export function checkout({ fs, onProgress, dir, gitdir, remote, ref: _ref, filep
  * @param {boolean} [args.noCheckout = false] - If true, clone will only fetch the repo, not check out a branch. Skipping checkout can save a lot of time normally spent writing files to disk.
  * @param {boolean} [args.noTags = false] - By default clone will fetch all tags. `noTags` disables that behavior.
  * @param {string} [args.remote = 'origin'] - What to name the remote that is created.
+ * @param {string} [args.filter] - Partial clone filter spec sent to the server during fetch. Limits which objects the server includes in the packfile. Common values: `'blob:limit=2097152'` (exclude blobs larger than 2MB), `'blob:none'` (exclude all blobs), `'tree:0'` (exclude all trees). Values are in bytes by default; `k`, `m`, and `g` suffixes are also supported (e.g. `'blob:limit=2m'`). Requires server support for the `filter` capability. Filtered-out objects will be skipped during checkout.
  * @param {number} [args.depth] - Integer. Determines how much of the git repository's history to retrieve
  * @param {Date} [args.since] - Only fetch commits created after the given date. Mutually exclusive with `depth`.
  * @param {string[]} [args.exclude = []] - A list of branches or tags. Instructs the remote server not to send us any commits reachable from these refs.
@@ -1391,6 +1392,8 @@ export function fastForward({ fs, http, onProgress, onMessage, onAuth, onAuthSuc
  * @param {string} [args.ref] - Which branch to fetch if `singleBranch` is true. By default this is the current branch or the remote's default branch.
  * @param {string} [args.remoteRef] - The name of the branch on the remote to fetch if `singleBranch` is true. By default this is the configured remote tracking branch.
  * @param {boolean} [args.tags = false] - Also fetch tags
+ * @param {boolean} [args.unshallow = false] - Convert a shallow clone to a full clone by requesting complete commit history from the server. Sends `deepen 2147483647` in the upload-pack request. Mutually exclusive with `depth`.
+ * @param {string} [args.filter] - Partial clone filter spec sent to the server. Limits which objects the server includes in the packfile. Common values: `'blob:limit=2097152'` (exclude blobs larger than 2MB), `'blob:none'` (exclude all blobs), `'tree:0'` (exclude all trees). Values are in bytes by default; `k`, `m`, and `g` suffixes are also supported (e.g. `'blob:limit=2m'`). Requires server support for the `filter` capability. Filtered-out objects will be skipped during checkout.
  * @param {number} [args.depth] - Integer. Determines how much of the git repository's history to retrieve
  * @param {boolean} [args.relative = false] - Changes the meaning of `depth` to be measured from the current shallow depth rather than from the branch tip.
  * @param {Date} [args.since] - Only fetch commits created after the given date. Mutually exclusive with `depth`.
@@ -1419,7 +1422,7 @@ export function fastForward({ fs, http, onProgress, onMessage, onAuth, onAuthSuc
  * console.log(result)
  *
  */
-export function fetch({ fs, http, onProgress, onMessage, onAuth, onAuthSuccess, onAuthFailure, dir, gitdir, ref, remote, remoteRef, url, corsProxy, filter, depth, since, exclude, relative, tags, singleBranch, headers, prune, pruneTags, cache, }: {
+export function fetch({ fs, http, onProgress, onMessage, onAuth, onAuthSuccess, onAuthFailure, dir, gitdir, ref, remote, remoteRef, url, corsProxy, unshallow, filter, depth, since, exclude, relative, tags, singleBranch, headers, prune, pruneTags, cache, }: {
     fs: CallbackFsClient | PromiseFsClient;
     http: HttpClient;
     onProgress?: ProgressCallback;
@@ -1435,6 +1438,7 @@ export function fetch({ fs, http, onProgress, onMessage, onAuth, onAuthSuccess, 
     ref?: string;
     remoteRef?: string;
     tags?: boolean;
+    unshallow?: boolean;
     filter?: string;
     depth?: number;
     relative?: boolean;
@@ -2220,6 +2224,7 @@ export function packObjects({ fs, dir, gitdir, oids, write, cache, }: {
  * @param {string} [args.remoteRef] - (Added in 1.1.0) The name of the branch on the remote to fetch. By default this is the configured remote tracking branch.
  * @param {string} [args.corsProxy] - Optional [CORS proxy](https://www.npmjs.com/%40isomorphic-git/cors-proxy). Overrides value in repo config.
  * @param {boolean} [args.singleBranch = false] - Instead of the default behavior of fetching all the branches, only fetch a single branch.
+ * @param {string} [args.filter] - Partial clone filter spec sent to the server. Limits which objects the server includes in the packfile. Common values: `'blob:limit=2097152'` (exclude blobs larger than 2MB), `'blob:none'` (exclude all blobs), `'tree:0'` (exclude all trees). Values are in bytes by default; `k`, `m`, and `g` suffixes are also supported (e.g. `'blob:limit=2m'`). Requires server support for the `filter` capability. Filtered-out objects will be skipped during checkout.
  * @param {boolean} [args.fastForwardOnly = false] - Only perform simple fast-forward merges. (Don't create merge commits.)
  * @param {Object<string, string>} [args.headers] - Additional headers to include in HTTP requests, similar to git's `extraHeader` config
  * @param {Object} [args.author] - The details about the author.

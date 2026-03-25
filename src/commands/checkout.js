@@ -75,17 +75,20 @@ export async function _checkout({
 
   // Get tree oid
   const startResolveRemote = performance.now();
-
   let oid
   try {
+    onProgress && onProgress({ total: 0, phase: `pre-GitRefManager_resolve:${ref}`, loaded: 0})
     oid = await GitRefManager.resolve({ fs, gitdir, ref })
     // TODO: Figure out what to do if both 'ref' and 'remote' are specified, ref already exists,
     // and is configured to track a different remote.
   } catch (err) {
+    onProgress && onProgress({ total: 0, phase: `catch-GitRefManager_resolve`, loaded: 0})
+
     if (ref === 'HEAD') throw err
     // If `ref` doesn't exist, create a new remote tracking branch
     // Figure out the commit to checkout
     const remoteRef = `${remote}/${ref}`
+    onProgress && onProgress({ total: 0, phase: `catch-GitRefManager_resolve:${remoteRef}`, loaded: 0})
     oid = await GitRefManager.resolve({
       fs,
       gitdir,
@@ -107,6 +110,7 @@ export async function _checkout({
     })
   }
   perfSegments.resolveRemote = getElapsedSeconds(startResolveRemote);
+    onProgress && onProgress({ total: 0, phase: `post-GitRefManager_resolve:${ref}`, loaded: 0})
 
   // Update working dir
   if (!noCheckout) {
@@ -129,6 +133,7 @@ export async function _checkout({
         filepaths,
       })
     } catch (err) {
+      console.log("analysis error:", err, err.stack)
       // Throw a more helpful error message for this common mistake.
       if (err instanceof NotFoundError && err.data.what === oid) {
         throw new CommitNotFetchedError(ref, oid)
@@ -148,7 +153,7 @@ export async function _checkout({
       .filter(([method]) => method === 'conflict')
       .map(([method, fullpath]) => fullpath)
     perfSegments.conflicts = getElapsedSeconds(startConflicts);
-
+    console.log("_checkout conflicts:", conflicts);
     if (conflicts.length > 0) {
       throw new CheckoutConflictError(conflicts)
     }
@@ -160,6 +165,7 @@ export async function _checkout({
       .filter(([method]) => method === 'error')
       .map(([method, fullpath]) => fullpath)
     perfSegments.errors = getElapsedSeconds(startErrors);
+    console.log("_checkout errors:", errors);
 
     if (errors.length > 0) {
       throw new InternalError(errors.join(', '))
@@ -177,6 +183,8 @@ export async function _checkout({
     // to just do ops in 4 dumb phases: delete files, delete dirs, create dirs, write files
 
     let count = 0
+    console.log("_checkout ops:", ops);
+
     const total = ops.length
     //if we're going to do a majority of just pure file writes/updates, then lets read
     const startDeleteFiles = performance.now();

@@ -177,11 +177,16 @@ export class GitRefManager {
    * @returns {Promise<string>}
    */
   static async resolve({ fs, gitdir, ref, depth = undefined }) {
+    console.log("GitRefManager.resolve:", gitdir, ref, depth)
+    debugger;
     if (depth !== undefined) {
       depth--
       if (depth === -1) {
         return ref
       }
+    }
+    if (ref == null) {
+      throw new NotFoundError(ref)
     }
     let sha
     // Is it a ref pointer?

@@ -26,7 +26,7 @@ import { join } from '../utils/join.js'
  * @param {boolean} [args.track = true] - If false, will not set the remote branch tracking information. Defaults to true.
  * @param {object} [args.cache] - a [cache](cache.md) object
  *
- * @returns {Promise<void>} Resolves successfully when filesystem operations are complete
+ * @returns {Promise<Object>} Resolves successfully when filesystem operations are complete
  *
  * @example
  * // switch to the main branch
